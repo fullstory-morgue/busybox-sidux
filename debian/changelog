@@ -1,0 +1,35 @@
+busybox-kanotix (1.00+cvs20050406-3) unstable; urgency=low
+
+  * compile with gcc-4.0.
+  * bump standards version to 3.6.2.
+  * modify packaging.
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Wed, 27 Jul 2005 01:49:49 +0200
+
+busybox-kanotix (1.00+cvs20050406-2) unstable; urgency=low
+
+  * test uclib again. 
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Wed,  6 Apr 2005 17:38:18 +0200
+
+busybox-kanotix (1.00+cvs20050406-1) unstable; urgency=low
+
+  * new upstream snapshot.
+  * don't link against uclib.
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Wed,  6 Apr 2005 11:33:46 +0200
+
+busybox-kanotix (1.00+cvs20050308-1) unstable; urgency=low
+
+  * new upstream snapshot.
+  * fix config.
+  * create static binary.
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Tue,  8 Mar 2005 22:56:08 +0100
+
+busybox-kanotix (1.00+cvs20050210-1) unstable; urgency=low
+
+  * initial Kanotix release.
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Fri, 11 Feb 2005 13:14:14 +0100
+

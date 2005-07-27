@@ -1,0 +1,12 @@
+--- a/.config	2004-12-15 09:35:00.000000000 +0100
++++ b/.config	2004-12-15 09:32:55.000000000 +0100
+@@ -23,7 +23,8 @@
+ #
+ CONFIG_STATIC=y
+ CONFIG_LFS=y
+-# USING_CROSS_COMPILER is not set
++USING_CROSS_COMPILER=y
++CROSS_COMPILER_PREFIX="/usr/i386-uclibc-linux/bin/i386-uclibc-linux-"
+ EXTRA_CFLAGS_OPTIONS=""
+ 
+ #
