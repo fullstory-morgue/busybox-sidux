@@ -19,7 +19,11 @@
 
 #--------------------------------------------------------
 PROG      := busybox
-VERSION   := 1.00
+MAJOR_VERSION   :=1
+MINOR_VERSION   :=1
+SUBLEVEL_VERSION:=0
+EXTRAVERSION    :=-pre1
+VERSION   :=$(MAJOR_VERSION).$(MINOR_VERSION).$(SUBLEVEL_VERSION)$(EXTRAVERSION)
 BUILDTIME := $(shell TZ=UTC date -u "+%Y.%m.%d-%H:%M%z")
 
 
@@ -27,7 +31,7 @@ BUILDTIME := $(shell TZ=UTC date -u "+%Y.%m.%d-%H:%M%z")
 # With a modern GNU make(1) (highly recommended, that's what all the
 # developers use), all of the following configuration values can be
 # overridden at the command line.  For example:
-#   make CROSS=powerpc-linux- BB_SRC_DIR=$HOME/busybox PREFIX=/mnt/app
+#   make CROSS=powerpc-linux- top_srcdir="$HOME/busybox" PREFIX=/mnt/app
 #--------------------------------------------------------
 
 # If you are running a cross compiler, you will want to set 'CROSS'
@@ -43,6 +47,15 @@ NM             = $(CROSS)nm
 STRIP          = $(CROSS)strip
 CPP            = $(CC) -E
 # MAKEFILES      = $(top_builddir)/.config
+RM             = rm
+RM_F           = $(RM) -f
+LN             = ln
+LN_S           = $(LN) -s
+MKDIR          = mkdir
+MKDIR_P        = $(MKDIR) -p
+MV             = mv
+CP             = cp
+
 
 # What OS are you compiling busybox for?  This allows you to include
 # OS specific things, syscall overrides, etc.
@@ -60,11 +73,6 @@ LC_ALL:= C
 # For optimization overrides, it's better still to set OPTIMIZATION.
 CFLAGS_EXTRA=$(subst ",, $(strip $(EXTRA_CFLAGS_OPTIONS)))
 
-# If you have a "pristine" source directory, point BB_SRC_DIR to it.
-# Experimental and incomplete; tell the mailing list
-# <busybox@busybox.net> if you do or don't like it so far.
-BB_SRC_DIR=
-
 # To compile vs some other alternative libc, you may need to use/adjust
 # the following lines to meet your needs...
 #
@@ -81,12 +89,12 @@ BB_SRC_DIR=
 
 WARNINGS=-Wall -Wstrict-prototypes -Wshadow
 CFLAGS=-I$(top_builddir)/include -I$(top_srcdir)/include -I$(srcdir)
-ARFLAGS=-r
+ARFLAGS=cru
 
 #--------------------------------------------------------
-export VERSION BUILDTIME TOPDIR HOSTCC HOSTCFLAGS CROSS CC AR AS LD NM STRIP CPP
+export VERSION BUILDTIME HOSTCC HOSTCFLAGS CROSS CC AR AS LD NM STRIP CPP
 ifeq ($(strip $(TARGET_ARCH)),)
-TARGET_ARCH=$(shell $(CC) -dumpmachine | sed -e s'/-.*//' \
+TARGET_ARCH:=$(shell $(CC) -dumpmachine | sed -e s'/-.*//' \
 		-e 's/i.86/i386/' \
 		-e 's/sparc.*/sparc/' \
 		-e 's/arm.*/arm/g' \
@@ -106,8 +114,20 @@ ifeq ($(filter $(noconfig_targets),$(MAKECMDGOALS)),)
 endif
 
 # A nifty macro to make testing gcc features easier
-check_gcc=$(shell if $(CC) $(1) -S -o /dev/null -xc /dev/null > /dev/null 2>&1; \
-	then echo "$(1)"; else echo "$(2)"; fi)
+check_gcc=$(shell \
+	if [ "$(1)" != "" ]; then \
+		if $(CC) $(1) -S -o /dev/null -xc /dev/null > /dev/null 2>&1; \
+		then echo "$(1)"; else echo "$(2)"; fi \
+	fi)
+
+# Setup some shortcuts so that silent mode is silent like it should be
+ifeq ($(subst s,,$(MAKEFLAGS)),$(MAKEFLAGS))
+export MAKE_IS_SILENT=n
+SECHO=@echo
+else
+export MAKE_IS_SILENT=y
+SECHO=-@false
+endif
 
 #--------------------------------------------------------
 # Arch specific compiler optimization stuff should go here.
@@ -115,8 +135,7 @@ check_gcc=$(shell if $(CC) $(1) -S -o /dev/null -xc /dev/null > /dev/null 2>&1; 
 # for OPTIMIZATION...
 
 # use '-Os' optimization if available, else use -O2
-OPTIMIZATION=
-OPTIMIZATION=${call check_gcc,-Os,-O2}
+OPTIMIZATION:=$(call check_gcc,-Os,-O2)
 
 # Some nice architecture specific optimizations
 ifeq ($(strip $(TARGET_ARCH)),arm)
@@ -128,7 +147,7 @@ ifeq ($(strip $(TARGET_ARCH)),i386)
 	OPTIMIZATION+=$(call check_gcc,-falign-functions=0 -falign-jumps=0 -falign-loops=0,\
 		-malign-functions=0 -malign-jumps=0 -malign-loops=0)
 endif
-OPTIMIZATIONS=$(OPTIMIZATION) -fomit-frame-pointer
+OPTIMIZATIONS:=$(OPTIMIZATION) -fomit-frame-pointer
 
 #
 #--------------------------------------------------------
@@ -158,11 +177,15 @@ ifeq ($(strip $(CONFIG_DEBUG)),y)
     STRIPCMD:=/bin/true -Not_stripping_since_we_are_debugging
 else
     CFLAGS+=$(WARNINGS) $(OPTIMIZATIONS) -D_GNU_SOURCE -DNDEBUG
-    LDFLAGS += -s -Wl,-warn-common
-    STRIPCMD:=$(STRIP) --remove-section=.note --remove-section=.comment
+    LDFLAGS += -Wl,-warn-common
+    STRIPCMD:=$(STRIP) -s --remove-section=.note --remove-section=.comment
 endif
 ifeq ($(strip $(CONFIG_STATIC)),y)
     LDFLAGS += --static
+endif
+
+ifeq ($(strip $(CONFIG_SELINUX)),y)
+    LIBRARIES += -lselinux
 endif
 
 ifeq ($(strip $(PREFIX)),)
@@ -171,13 +194,10 @@ endif
 
 # Additional complications due to support for pristine source dir.
 # Include files in the build directory should take precedence over
-# the copy in BB_SRC_DIR, both during the compilation phase and the
+# the copy in top_srcdir, both during the compilation phase and the
 # shell script that finds the list of object files.
 # Work in progress by <ldoolitt@recycle.lbl.gov>.
-#
-ifneq ($(strip $(BB_SRC_DIR)),)
-    VPATH:=$(BB_SRC_DIR)
-endif
+
 
 OBJECTS:=$(APPLET_SOURCES:.c=.o) busybox.o usage.o applets.o
 CFLAGS    += $(CROSS_CFLAGS)
@@ -190,7 +210,3 @@ endif
 CFLAGS += $(CFLAGS_EXTRA)
 
 .PHONY: dummy
-
-
-.EXPORT_ALL_VARIABLES:
-

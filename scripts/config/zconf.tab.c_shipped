@@ -175,6 +175,8 @@ static bool zconf_endtoken(int token, int starttoken, int endtoken);
 
 struct symbol *symbol_hash[257];
 
+static struct menu *current_menu, *current_entry;
+
 #define YYERROR_VERBOSE
 
 
@@ -227,7 +229,7 @@ typedef union YYSTYPE {
 #  define YYSTACK_ALLOC alloca
 # else
 #  ifndef YYSTACK_USE_ALLOCA
-#   if defined (alloca) || defined (_ALLOCA_H)
+#   if defined (alloca) || (defined (_ALLOCA_H) && defined (__GNUC__))
 #    define YYSTACK_ALLOC alloca
 #   else
 #    ifdef __GNUC__
@@ -2119,6 +2121,7 @@ void zconfdump(FILE *out)
 }
 
 #include "lex.zconf.c"
+#include "util.c"
 #include "confdata.c"
 #include "expr.c"
 #include "symbol.c"

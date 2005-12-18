@@ -53,11 +53,11 @@
 	 - commands: (p)rint, (d)elete, (s)ubstitue (with g & I flags)
 	 - edit commands: (a)ppend, (i)nsert, (c)hange
 	 - file commands: (r)ead
-	 - backreferences in substitution expressions (\1, \2...\9)
+	 - backreferences in substitution expressions (\0, \1, \2...\9)
 	 - grouped commands: {cmd1;cmd2}
 	 - transliteration (y/source-chars/dest-chars/)
 	 - pattern space hold space storing / swapping (g, h, x)
-	 - labels / branching (: label, b, t)
+	 - labels / branching (: label, b, t, T)
 
 	 (Note: Specifying an address (range) to match is *optional*; commands
 	 default to the whole pattern space if no specific address match was
@@ -65,7 +65,7 @@
 
 	Unsupported features:
 
-	 - GNU extensions
+	 - most GNU extensions
 	 - and more.
 
 	Todo:
@@ -79,12 +79,12 @@
 
 #include <stdio.h>
 #include <unistd.h>		/* for getopt() */
-#include <regex.h>
 #include <string.h>		/* for strdup() */
 #include <errno.h>
 #include <ctype.h>		/* for isspace() */
 #include <stdlib.h>
 #include "busybox.h"
+#include "xregex.h"
 
 typedef struct sed_cmd_s {
     /* Ordered by alignment requirements: currently 36 bytes on x86 */
@@ -116,18 +116,18 @@ typedef struct sed_cmd_s {
 /* globals */
 /* options */
 static int be_quiet, in_place, regex_type;
-FILE *nonstdout;
-char *outname,*hold_space;
+static FILE *nonstdout;
+static char *outname,*hold_space;
 
 /* List of input files */
-int input_file_count,current_input_file;
-FILE **input_file_list;
+static int input_file_count,current_input_file;
+static FILE **input_file_list;
 
 static const char bad_format_in_subst[] =
 	"bad format in substitution expression";
-const char *const semicolon_whitespace = "; \n\r\t\v";
+static const char *const semicolon_whitespace = "; \n\r\t\v";
 
-regmatch_t regmatch[10];
+static regmatch_t regmatch[10];
 static regex_t *previous_regex_ptr;
 
 /* linked list of sed commands */
@@ -139,7 +139,7 @@ struct append_list {
 	char *string;
 	struct append_list *next;
 };
-struct append_list *append_head=NULL, *append_tail=NULL;
+static struct append_list *append_head=NULL, *append_tail=NULL;
 
 #ifdef CONFIG_FEATURE_CLEAN_UP
 static void free_and_close_stuff(void)
@@ -440,7 +440,7 @@ static char *parse_cmd_args(sed_cmd_t *sed_cmd, char *cmdstr)
 		if(sed_cmd->cmd=='w')
 			sed_cmd->file=bb_xfopen(sed_cmd->string,"w");
 	/* handle branch commands */
-	} else if (strchr(":bt", sed_cmd->cmd)) {
+	} else if (strchr(":btT", sed_cmd->cmd)) {
 		int length;
 
 		while(isspace(*cmdstr)) cmdstr++;
@@ -482,7 +482,7 @@ static char *parse_cmd_args(sed_cmd_t *sed_cmd, char *cmdstr)
 
 /* Parse address+command sets, skipping comment lines. */
 
-void add_cmd(char *cmdstr)
+static void add_cmd(char *cmdstr)
 {
 	static char *add_cmd_line=NULL;
 	sed_cmd_t *sed_cmd;
@@ -576,7 +576,7 @@ void add_cmd(char *cmdstr)
 
 /* Append to a string, reallocating memory as necessary. */
 
-struct pipeline {
+static struct pipeline {
 	char *buf;	/* Space to hold string */
 	int idx;	/* Space used */
 	int len;	/* Space allocated */
@@ -584,7 +584,7 @@ struct pipeline {
 
 #define PIPE_GROW 64
 
-void pipe_putc(char c)
+static void pipe_putc(char c)
 {
 	if(pipeline.idx==pipeline.len) {
 		pipeline.buf = xrealloc(pipeline.buf, pipeline.len + PIPE_GROW);
@@ -600,7 +600,7 @@ static void do_subst_w_backrefs(const char *line, const char *replace)
 	/* go through the replacement string */
 	for (i = 0; replace[i]; i++) {
 		/* if we find a backreference (\1, \2, etc.) print the backref'ed * text */
-		if (replace[i] == '\\' && replace[i+1]>'0' && replace[i+1]<='9') {
+		if (replace[i] == '\\' && replace[i+1]>='0' && replace[i+1]<='9') {
 			int backref=replace[++i]-'0';
 
 			/* print out the text held in regmatch[backref] */
@@ -729,7 +729,7 @@ static void flush_append(void)
 	append_head=append_tail=NULL;
 }
 
-void add_input_file(FILE *file)
+static void add_input_file(FILE *file)
 {
 	input_file_list=xrealloc(input_file_list,(input_file_count+1)*sizeof(FILE *));
 	input_file_list[input_file_count++]=file;
@@ -1000,11 +1000,15 @@ restart:
 						break;
 					}
 
-					/* Test if substition worked, branch if so. */
+					/* Test/branch if substitution occurred */
 					case 't':
-						if (!substituted) break;
+						if(!substituted) break;
 						substituted=0;
-							/* Fall through */
+						/* Fall through */
+					/* Test/branch if substitution didn't occur */
+					case 'T':
+						if (substituted) break;
+						/* Fall through */
 					/* Branch to label */
 					case 'b':
 						if (!sed_cmd->string) goto discard_commands;
@@ -1021,6 +1025,7 @@ restart:
 							for (j = 0; sed_cmd->string[j]; j += 2) {
 								if (pattern_space[i] == sed_cmd->string[j]) {
 									pattern_space[i] = sed_cmd->string[j + 1];
+									break;
 								}
 							}
 						}
@@ -1187,10 +1192,7 @@ extern int sed_main(int argc, char **argv)
 	 * files were specified or '-' was specified, take input from stdin.
 	 * Otherwise, we process all the files specified. */
 	if (argv[optind] == NULL) {
-		if(in_place) {
-			fprintf(stderr,"sed: Filename required for -i\n");
-			exit(1);
-		}
+		if(in_place) bb_error_msg_and_die("Filename required for -i");
 		add_input_file(stdin);
 		process_files();
 	} else {
@@ -1206,14 +1208,16 @@ extern int sed_main(int argc, char **argv)
 				if (file) {
 					if(in_place) {
 						struct stat statbuf;
+						int nonstdoutfd;
+						
 						outname=bb_xstrndup(argv[i],strlen(argv[i])+6);
 						strcat(outname,"XXXXXX");
-						mkstemp(outname);
-						nonstdout=bb_wfopen(outname,"w");
+						if(-1==(nonstdoutfd=mkstemp(outname)))
+							bb_error_msg_and_die("no temp file");
+						nonstdout=fdopen(nonstdoutfd,"w");
 						/* Set permissions of output file */
 						fstat(fileno(file),&statbuf);
-						fchmod(fileno(nonstdout),statbuf.st_mode);
-						atexit(cleanup_outname);
+						fchmod(nonstdoutfd,statbuf.st_mode);
 						add_input_file(file);
 						process_files();
 						fclose(nonstdout);

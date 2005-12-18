@@ -234,10 +234,6 @@ static void flush_outbuf(void);
  * terms of the GNU General Public License, see the file COPYING.
  */
 
-#if !defined(OF) && defined(lint)
-#  include "gzip.h"
-#endif
-
 #ifndef BITS
 #  define BITS 16
 #endif
@@ -541,7 +537,7 @@ static unsigned bi_reverse(unsigned code, int len)
 /* ===========================================================================
  * Write out any remaining bits in an incomplete byte.
  */
-static void bi_windup()
+static void bi_windup(void)
 {
 	if (bi_valid > 8) {
 		put_short(bi_buf);
@@ -978,7 +974,7 @@ static void check_match(IPos start, IPos match, int length)
  *    file reads are performed for at least two bytes (required for the
  *    translate_eol option).
  */
-static void fill_window()
+static void fill_window(void)
 {
 	register unsigned n, m;
 	unsigned more =
@@ -1042,7 +1038,7 @@ static void fill_window()
  * evaluation for matches: a match is finally adopted only if there is
  * no better match at the next window position.
  */
-static ulg deflate()
+static ulg deflate(void)
 {
 	IPos hash_head;		/* head of hash chain */
 	IPos prev_match;	/* previous match */
@@ -1270,7 +1266,7 @@ int gzip_main(int argc, char **argv)
 					strcat(path, ".gz");
 
 					/* Open output file */
-#if (__GLIBC__ >= 2) && (__GLIBC_MINOR__ >= 1)
+#if (__GLIBC__ >= 2) && (__GLIBC_MINOR__ >= 1) && defined O_NOFOLLOW
 					outFileNum =
 						open(path, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW);
 #else
@@ -1730,7 +1726,7 @@ static void ct_init(ush * attr, int *methodp)
 /* ===========================================================================
  * Initialize a new block.
  */
-static void init_block()
+static void init_block(void)
 {
 	int n;				/* iterates over tree elements */
 
@@ -2143,7 +2139,7 @@ static void send_tree(ct_data * tree, int max_code)
  * Construct the Huffman tree for the bit lengths and return the index in
  * bl_order of the last bit length code to send.
  */
-static int build_bl_tree()
+static int build_bl_tree(void)
 {
 	int max_blindex;	/* index of last bit length code of non zero freq */
 
@@ -2406,7 +2402,7 @@ static void compress_block(ct_data * ltree, ct_data * dtree)
  * IN assertion: the fields freq of dyn_ltree are set and the total of all
  * frequencies does not exceed 64K (to fit in an int on 16 bit machines).
  */
-static void set_file_type()
+static void set_file_type(void)
 {
 	int n = 0;
 	unsigned ascii_freq = 0;
@@ -2519,7 +2515,7 @@ static int file_read(char *buf, unsigned size)
  * Write the output buffer outbuf[0..outcnt-1] and update bytes_out.
  * (used for the compressed data only)
  */
-static void flush_outbuf()
+static void flush_outbuf(void)
 {
 	if (outcnt == 0)
 		return;

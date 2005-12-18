@@ -36,6 +36,9 @@
 #ifdef L_write_error
 	const char * const bb_msg_write_error = "Write Error";
 #endif
+#ifdef L_read_error
+	const char * const bb_msg_read_error = "Read Error";
+#endif
 #ifdef L_name_longer_than_foo
 	const char * const bb_msg_name_longer_than_foo = "Names longer than %d chars not supported.";
 #endif
@@ -94,3 +97,10 @@ const char * const bb_path_motd_file = MOTD_FILE;
 const char * const bb_default_login_shell = LIBBB_DEFAULT_LOGIN_SHELL;
 #endif
 
+#ifdef L_bb_dev_null
+const char * const bb_dev_null = "/dev/null";
+#endif
+
+#ifdef L_bb_common_bufsiz1
+char bb_common_bufsiz1[BUFSIZ+1];
+#endif

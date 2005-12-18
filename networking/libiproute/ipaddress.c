@@ -27,6 +27,7 @@
 
 #include "rt_names.h"
 #include "utils.h"
+#include "ip_common.h"
 
 #include "libbb.h"
 
@@ -48,7 +49,7 @@ static struct
 	struct rtnl_handle *rth;
 } filter;
 
-void print_link_flags(FILE *fp, unsigned flags, unsigned mdown)
+static void print_link_flags(FILE *fp, unsigned flags, unsigned mdown)
 {
 	fprintf(fp, "<");
 	flags &= ~IFF_RUNNING;

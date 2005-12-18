@@ -91,7 +91,7 @@ int su_main ( int argc, char **argv )
 		opt_args = argv + optind;
 
 #if defined( SYSLOG_SUCCESS ) || defined( SYSLOG_FAILURE )
-#ifdef CONFIG_FEATURE_U_W_TMP
+#ifdef CONFIG_FEATURE_UTMP
 	/* The utmp entry (via getlogin) is probably the best way to identify
 	   the user, especially if someone su's from a su-shell.  */
 	old_user = getlogin ( );
@@ -147,11 +147,10 @@ int su_main ( int argc, char **argv )
 
 	change_identity ( pw );
 	setup_environment ( opt_shell, opt_loginshell, !opt_preserve, pw );
-	run_shell ( opt_shell, opt_loginshell, opt_command, (const char**)opt_args
 #ifdef CONFIG_SELINUX
-	, 0
+       set_current_security_context(NULL);
 #endif
-	);
+	run_shell ( opt_shell, opt_loginshell, opt_command, (const char**)opt_args);
 
 	return EXIT_FAILURE;
 }
