@@ -1,3 +1,12 @@
+busybox-kanotix (1.1.0~pre1-1) unstable; urgency=low
+
+  * update to new upstream pre- release.
+  * update configs.
+  * overhaul packaging.
+  * update fsf address.
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Sun, 18 Dec 2005 15:54:38 +0100
+
 busybox-kanotix (1.00+cvs20050406-3) unstable; urgency=low
 
   * compile with gcc-4.0.

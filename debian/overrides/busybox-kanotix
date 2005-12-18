@@ -1,1 +1,2 @@
 busybox-kanotix: statically-linked-binary ./bin/busybox
+busybox-kanotix: binary-without-manpage busybox

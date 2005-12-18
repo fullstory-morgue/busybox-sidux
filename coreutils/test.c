@@ -51,7 +51,7 @@
 	unary-operator ::= "-r"|"-w"|"-x"|"-f"|"-d"|"-c"|"-b"|"-p"|
 		"-u"|"-g"|"-k"|"-s"|"-t"|"-z"|"-n"|"-o"|"-O"|"-G"|"-L"|"-S";
 
-	binary-operator ::= "="|"!="|"-eq"|"-ne"|"-ge"|"-gt"|"-le"|"-lt"|
+	binary-operator ::= "="|"=="|"!="|"-eq"|"-ne"|"-ge"|"-gt"|"-le"|"-lt"|
 			"-nt"|"-ot"|"-ef";
 	operand ::= <any legal UNIX file name>
 */
@@ -135,6 +135,7 @@ static const struct t_op {
 	"-L", FILSYM, UNOP}, {
 	"-S", FILSOCK, UNOP}, {
 	"=", STREQ, BINOP}, {
+	"==", STREQ, BINOP}, {
 	"!=", STRNE, BINOP}, {
 	"<", STRLT, BINOP}, {
 	">", STRGT, BINOP}, {
@@ -189,6 +190,11 @@ extern int test_main(int argc, char **argv)
 	if (strcmp(bb_applet_name, "[") == 0) {
 		if (strcmp(argv[--argc], "]"))
 			bb_error_msg_and_die("missing ]");
+		argv[argc] = NULL;
+	}
+	if (strcmp(bb_applet_name, "[[") == 0) {
+		if (strcmp(argv[--argc], "]]"))
+			bb_error_msg_and_die("missing ]]");
 		argv[argc] = NULL;
 	}
 	/* Implement special cases from POSIX.2, section 4.62.4 */
@@ -304,7 +310,7 @@ static arith_t primary(enum token n)
 	return strlen(*t_wp) > 0;
 }
 
-static int binop()
+static int binop(void)
 {
 	const char *opnd1, *opnd2;
 	struct t_op const *op;
@@ -531,7 +537,7 @@ static int test_eaccess(char *path, int mode)
 	return (-1);
 }
 
-static void initialize_group_array()
+static void initialize_group_array(void)
 {
 	ngroups = getgroups(0, NULL);
 	group_array = xrealloc(group_array, ngroups * sizeof(gid_t));

@@ -21,7 +21,7 @@ config CONFIG_FEATURE_2_4_MODULES
 config CONFIG_FEATURE_2_6_MODULES
 	bool "  Support version 2.6.x Linux kernels"
 	default n
-	depends on CONFIG_INSMOD
+	depends on CONFIG_INSMOD 
 	help
 	  Support module loading for newer 2.6.x Linux kernels.
 
@@ -79,6 +79,14 @@ config CONFIG_LSMOD
 	default n
 	help
 	  lsmod is used to display a list of loaded modules.
+
+config CONFIG_FEATURE_LSMOD_PRETTY_2_6_OUTPUT
+	bool "  lsmod pretty output for 2.6.x Linux kernels "
+	default n
+	depends on CONFIG_LSMOD 
+	help
+	  This option makes output format of lsmod adjusted to 
+	  the format of module-init-tools for Linux kernel 2.6.
 
 config CONFIG_FEATURE_QUERY_MODULE_INTERFACE
 	bool

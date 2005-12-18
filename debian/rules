@@ -1,29 +1,19 @@
 #!/usr/bin/make -f
 
-DEB_AUTO_UPDATE_DEBIAN_CONTROL := yes
-
-ifndef _cdbs_bootstrap
-_cdbs_scripts_path ?= /usr/lib/cdbs
-_cdbs_rules_path ?= /usr/share/cdbs/1/rules
-_cdbs_class_path ?= /usr/share/cdbs/1/class
-endif
-
 DEB_BUILD_ARCH_CPU      := $(shell dpkg-architecture -qDEB_BUILD_ARCH_CPU 2>/dev/null)
 
-include $(_cdbs_rules_path)/buildcore.mk$(_cdbs_makefile_suffix)
-include $(_cdbs_rules_path)/debhelper.mk$(_cdbs_makefile_suffix)
+include /usr/share/cdbs/1/rules/buildcore.mk
+include /usr/share/cdbs/1/rules/debhelper.mk
+#include /usr/share/cdbs/1/rules/simple-patchsys.mk
 
 configure/busybox-kanotix::
-	$(MAKE) defconfig
-	patch -p1 < $(CURDIR)/debian/patches/kanotix_config.diff
-ifeq ($(DEB_BUILD_ARCH_CPU),i386)
-	patch -p1 < $(CURDIR)/debian/patches/uclib_config.diff
-endif
+	#$(MAKE) defconfig
+	cat $(CURDIR)/debian/config/$(DEB_BUILD_ARCH_CPU) > $(CURDIR)/.config
+	$(MAKE) oldconfig
 
 build/busybox-kanotix::
 	$(MAKE) dep
 	$(MAKE)
-	touch debian/stamp-custom-build
 
 clean/busybox-kanotix::
 	$(MAKE) distclean

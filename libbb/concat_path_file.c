@@ -30,15 +30,12 @@
 
 extern char *concat_path_file(const char *path, const char *filename)
 {
-	char *outbuf;
 	char *lc;
 
 	if (!path)
-	    path="";
+		path = "";
 	lc = last_char_is(path, '/');
 	while (*filename == '/')
 		filename++;
-	bb_xasprintf(&outbuf, "%s%s%s", path, (lc==NULL)? "/" : "", filename);
-
-	return outbuf;
+	return bb_xasprintf("%s%s%s", path, (lc==NULL ? "/" : ""), filename);
 }

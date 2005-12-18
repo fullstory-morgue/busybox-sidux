@@ -37,7 +37,7 @@ run_applet_testcase ()
 
 	if [ $? != 0 ] ; then
 		echo FAIL: $testname
-		if [ "$verbose" = 1 ]; then
+		if [ $verbose -gt 0 ]; then
 			cat .logfile.txt
 			#exit 1;
 		fi;
@@ -77,26 +77,44 @@ run_applet_tests ()
 
 
 status=0
+verbose=0
 
 if [ x"$1" = x"-v" ]; then
 	verbose=1
+	export VERBOSE=$verbose
 	shift
 fi
 
 if [ $# -ne 0 ]; then
-	applets="$@"
+	applets=$(cd $srcdir ; for i in $@; do ls ${i}* ; done)
 else
 	applets=$(ls $srcdir)
 fi
 
 for applet in $applets; do
-	if [ "$applet" != CVS -a -d "$srcdir/$applet" ]; then
+	if [ "$applet" = "links" ]; then continue; fi
+	if [ "$applet" != "CVS" -a -d "$srcdir/$applet" ]; then
 		if run_applet_tests $applet; then
 			:
 		else
 			status=1
 		fi
 	fi
-done
+	applet=$(echo "$applet" | sed -n 's/\.tests$//p')
+	if [ ${#applet} -ne 0 ]
+	then
+		if [ -d links ]; then
+			rm -f links/"$applet" 
+		else
+			mkdir links 2> /dev/null
+		fi
+		ln -s ${bindir:-../..}/busybox links/"$applet"
+		PATH="$srcdir:$PATH" COMMAND="links/$applet" \
+			"${srcdir:-.}/$applet".tests
+		if [ $? -ne 0 ]; then status=1; fi
+	fi
 
+done
+rm -f links/*
+rmdir links
 exit $status

@@ -31,7 +31,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <getopt.h>
+#include <getopt.h> /* struct option */
 #include "busybox.h"
 #include "libcoreutils/coreutils.h"
 
@@ -56,7 +56,7 @@ extern int mv_main(int argc, char **argv)
 	int status = 0;
 
 	bb_applet_long_options = mv_long_options;
-	bb_opt_complementaly = "f-i:i-f";
+	bb_opt_complementally = "f-i:i-f";
 	flags = bb_getopt_ulflags(argc, argv, "fi");
 	if (optind + 2 > argc) {
 		bb_show_usage();
@@ -99,10 +99,10 @@ DO_MOVE:
 			struct stat source_stat;
 			int source_exists;
 
-			if (errno != EXDEV) {
+			if (errno != EXDEV ||
+				(source_exists = cp_mv_stat(*argv, &source_stat)) < 1) {
 				bb_perror_msg("unable to rename `%s'", *argv);
-			}
-			else if ((source_exists = cp_mv_stat(*argv, &source_stat)) >= 0) {
+			} else {
 				if (dest_exists) {
 					if (dest_exists == 3) {
 						if (source_exists != 3) {

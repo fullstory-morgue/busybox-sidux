@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/sysmacros.h>	/* For makedev */
 #include "unarchive.h"
 #include "libbb.h"
 
@@ -62,6 +63,7 @@ extern char get_header_tar(archive_handle_t *archive_handle)
 	} tar;
 	long sum = 0;
 	long i;
+	static int end = 0;
 
 	/* Align header */
 	data_align(archive_handle, 512);
@@ -74,8 +76,17 @@ extern char get_header_tar(archive_handle_t *archive_handle)
 
 	/* If there is no filename its an empty header */
 	if (tar.formated.name[0] == 0) {
+		if (end) {
+			/* This is the second consecutive empty header! End of archive!
+			 * Read until the end to empty the pipe from gz or bz2
+			 */
+			while (bb_full_read(archive_handle->src_fd, tar.raw, 512) == 512);
+			return(EXIT_FAILURE);
+		}
+		end = 1;
 		return(EXIT_SUCCESS);
 	}
+	end = 0;
 
 	/* Check header has valid magic, "ustar" is for the proper tar
 	 * 0's are for the old tar format

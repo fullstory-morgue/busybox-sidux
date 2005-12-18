@@ -27,7 +27,6 @@
  */
 
 #include <fcntl.h>
-#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,27 +49,27 @@ static void header_verbose_list_ar(const file_header_t *file_header)
 	printf("%s %d/%d%7d %s %s\n", &mode[1], file_header->uid, file_header->gid, (int) file_header->size, &mtime[4], file_header->name);
 }
 
-#define AR_CTX_PRINT			0x01
-#define AR_CTX_LIST				0x02
-#define AR_CTX_EXTRACT			0x04
+#define AR_CTX_PRINT		0x01
+#define AR_CTX_LIST		0x02
+#define AR_CTX_EXTRACT		0x04
 #define AR_OPT_PRESERVE_DATE	0x08
-#define AR_OPT_VERBOSE			0x10
-#define AR_OPT_CREATE			0x20
+#define AR_OPT_VERBOSE		0x10
+#define AR_OPT_CREATE		0x20
+#define AR_OPT_INSERT		0x40
 
 extern int ar_main(int argc, char **argv)
 {
 	archive_handle_t *archive_handle;
 	unsigned long opt;
+	static const char msg_unsupported_err[] = 
+			"Archive %s not supported.  Install binutils 'ar'.";
 	char magic[8];
 
 	archive_handle = init_handle();
-
-	bb_opt_complementaly = "p~tx:t~px:x~pt";
-	opt = bb_getopt_ulflags(argc, argv, "ptxovc");
-
-	if ((opt & 0x80000000UL) || (optind == argc)) {
-		bb_show_usage();
-	}
+	
+	/* Prepend '-' to the first argument if required */
+	bb_opt_complementally = "--:p:t:x:-1:?:p--tx:t--px:x--pt";
+	opt = bb_getopt_ulflags(argc, argv, "ptxovcr");
 
 	if (opt & AR_CTX_PRINT) {
 		archive_handle->action_data = data_extract_to_stdout;
@@ -88,7 +87,10 @@ extern int ar_main(int argc, char **argv)
 		archive_handle->action_header = header_verbose_list_ar;
 	}
 	if (opt & AR_OPT_CREATE) {
-		bb_error_msg_and_die("Archive creation not supported.  Install binutils 'ar'.");
+		bb_error_msg_and_die(msg_unsupported_err, "creation");
+	}
+	if (opt & AR_OPT_INSERT) {
+		bb_error_msg_and_die(msg_unsupported_err, "insertion");
 	}
 
 	archive_handle->src_fd = bb_xopen(argv[optind++], O_RDONLY);

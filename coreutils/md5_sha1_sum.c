@@ -2,19 +2,7 @@
  *  Copyright (C) 2003 Glenn L. McGrath
  *  Copyright (C) 2003-2004 Erik Andersen
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ * Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  */
 
 #include <fcntl.h>
@@ -42,45 +30,32 @@ static unsigned char *hash_bin_to_hex(unsigned char *hash_value,
 	max = (hash_length * 2) + 2;
 	hex_value = xmalloc(max);
 	for (x = len = 0; x < hash_length; x++) {
-		len += snprintf(hex_value + len, max - len, "%02x", hash_value[x]);
+		len += snprintf((char*)(hex_value + len), max - len, "%02x", hash_value[x]);
 	}
 	return (hex_value);
 }
 
 static uint8_t *hash_file(const char *filename, uint8_t hash_algo)
 {
-	uint8_t *hash_value_bin;
-	uint8_t *hash_value = NULL;
-	uint8_t hash_length;
-	int src_fd;
-
-	if (strcmp(filename, "-") == 0) {
-		src_fd = STDIN_FILENO;
-	} else {
-		src_fd = open(filename, O_RDONLY);
-	}
-
-	if (hash_algo == HASH_MD5) {
-		hash_length = 16;
-	} else {
-		hash_length = 20;
-	}
-
-	hash_value_bin = xmalloc(hash_length);
-
-	if ((src_fd != -1) && (hash_fd(src_fd, -1, hash_algo, hash_value_bin) != -2)) {
-		hash_value = hash_bin_to_hex(hash_value_bin, hash_length);
-	} else {
+	int src_fd = strcmp(filename, "-") == 0 ? STDIN_FILENO :
+		open(filename, O_RDONLY);
+	if (src_fd == -1) {
 		bb_perror_msg("%s", filename);
+		return NULL;
+	} else {
+		uint8_t *hash_value;
+		RESERVE_CONFIG_UBUFFER(hash_value_bin, 20);
+		hash_value = hash_fd(src_fd, -1, hash_algo, hash_value_bin) != -2 ?
+			hash_bin_to_hex(hash_value_bin, hash_algo == HASH_MD5 ? 16 : 20) :
+			NULL;
+		RELEASE_CONFIG_BUFFER(hash_value_bin);
+		close(src_fd);
+		return hash_value;
 	}
-
-	close(src_fd);
-
-	return(hash_value);
 }
 
 /* This could become a common function for md5 as well, by using md5_stream */
-extern int hash_files(int argc, char **argv, const uint8_t hash_algo)
+static int hash_files(int argc, char **argv, const uint8_t hash_algo)
 {
 	int return_value = EXIT_SUCCESS;
 	uint8_t *hash_value;
@@ -111,7 +86,7 @@ extern int hash_files(int argc, char **argv, const uint8_t hash_algo)
 		FILE *pre_computed_stream;
 		int count_total = 0;
 		int count_failed = 0;
-		unsigned char *file_ptr = argv[optind];
+		char *file_ptr = argv[optind];
 		char *line;
 
 		if (optind + 1 != argc) {
@@ -134,6 +109,8 @@ extern int hash_files(int argc, char **argv, const uint8_t hash_algo)
 				if (flags & FLAG_WARN) {
 					bb_error_msg("Invalid format");
 				}
+				count_failed++;
+				return_value = EXIT_FAILURE;
 				free(line);
 				continue;
 			}
@@ -142,7 +119,7 @@ extern int hash_files(int argc, char **argv, const uint8_t hash_algo)
 
 			hash_value = hash_file(filename_ptr, hash_algo);
 
-			if (hash_value && (strcmp(hash_value, line) == 0)) {
+			if (hash_value && (strcmp((char*)hash_value, line) == 0)) {
 				if (!(flags & FLAG_SILENT))
 					printf("%s: OK\n", filename_ptr);
 			} else {
@@ -175,7 +152,7 @@ extern int hash_files(int argc, char **argv, const uint8_t hash_algo)
 		hash_value = xmalloc(hash_length);
 
 		while (optind < argc) {
-			unsigned char *file_ptr = argv[optind++];
+			char *file_ptr = argv[optind++];
 
 			hash_value = hash_file(file_ptr, hash_algo);
 			if (hash_value == NULL) {
@@ -190,14 +167,14 @@ extern int hash_files(int argc, char **argv, const uint8_t hash_algo)
 }
 
 #ifdef CONFIG_MD5SUM
-extern int md5sum_main(int argc, char **argv)
+int md5sum_main(int argc, char **argv)
 {
 	return(hash_files(argc, argv, HASH_MD5));
 }
 #endif
 
 #ifdef CONFIG_SHA1SUM
-extern int sha1sum_main(int argc, char **argv)
+int sha1sum_main(int argc, char **argv)
 {
 	return(hash_files(argc, argv, HASH_SHA1));
 }
