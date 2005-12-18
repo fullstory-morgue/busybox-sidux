@@ -1,3 +1,9 @@
+busybox-kanotix (1.1.0~pre1-2) UNRELEASED; urgency=low
+
+  * NOT RELEASED YET
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Sun, 18 Dec 2005 17:57:40 +0100
+
 busybox-kanotix (1.1.0~pre1-1) unstable; urgency=low
 
   * update to new upstream pre- release.
