@@ -1,3 +1,9 @@
+busybox-kanotix (1.1.0~pre1-4) UNRELEASED; urgency=low
+
+  * NOT RELEASED YET
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Mon, 19 Dec 2005 01:52:58 +0100
+
 busybox-kanotix (1.1.0~pre1-3) unstable; urgency=low
 
   * enable xargs.
