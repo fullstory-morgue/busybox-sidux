@@ -1,8 +1,9 @@
-busybox-kanotix (1.1.0~pre1-3) UNRELEASED; urgency=low
+busybox-kanotix (1.1.0~pre1-3) unstable; urgency=low
 
-  * NOT RELEASED YET
+  * enable xargs.
+  * enable grep -A -B.
 
- -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Mon, 19 Dec 2005 01:04:30 +0100
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Mon, 19 Dec 2005 01:45:14 +0100
 
 busybox-kanotix (1.1.0~pre1-2) unstable; urgency=low
 
