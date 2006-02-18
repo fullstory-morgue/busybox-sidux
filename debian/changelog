@@ -2,8 +2,9 @@ busybox-kanotix (1.1.0-1) unstable; urgency=low
 
   * New upstream release
   * adapt config.
+  * add preliminary config for sparc.
 
- -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Sat, 18 Feb 2006 23:53:41 +0100
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Sun, 19 Feb 2006 00:02:26 +0100
 
 busybox-kanotix (1.1.0~pre1-3) unstable; urgency=low
 
