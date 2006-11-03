@@ -11,6 +11,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
 */
 
+#include "busybox.h"
 #include <sys/utsname.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -21,7 +22,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <fcntl.h>
-#include "busybox.h"
+#include <fnmatch.h>
 
 struct mod_opt_t {	/* one-way list of options to pass to a module */
 	char *  m_opt_val;
@@ -55,7 +56,30 @@ struct mod_list_t {	/* two-way list of modules to process */
 
 
 static struct dep_t *depend;
-static int autoclean, show_only, quiet, do_syslog, verbose;
+
+#define main_options "acdklnqrst:vVC:"
+#define INSERT_ALL     1        /* a */
+#define DUMP_CONF_EXIT 2        /* c */
+#define D_OPT_IGNORED  4        /* d */
+#define AUTOCLEAN_FLG  8        /* k */
+#define LIST_ALL       16       /* l */
+#define SHOW_ONLY      32       /* n */
+#define QUIET          64       /* q */
+#define REMOVE_OPT     128      /* r */
+#define DO_SYSLOG      256      /* s */
+#define RESTRICT_DIR   512      /* t */
+#define VERBOSE        1024     /* v */
+#define VERSION_ONLY   2048     /* V */
+#define CONFIG_FILE    4096     /* C */
+
+#define autoclean       (main_opts & AUTOCLEAN_FLG)
+#define show_only       (main_opts & SHOW_ONLY)
+#define quiet           (main_opts & QUIET)
+#define remove_opt      (main_opts & REMOVE_OPT)
+#define do_syslog       (main_opts & DO_SYSLOG)
+#define verbose         (main_opts & VERBOSE)
+
+static int main_opts;
 
 static int parse_tag_value ( char *buffer, char **ptag, char **pvalue )
 {
@@ -110,7 +134,7 @@ static char *reads ( int fd, char *buffer, size_t len )
 /*
  * This function appends an option to a list
  */
-struct mod_opt_t *append_option( struct mod_opt_t *opt_list, char *opt )
+static struct mod_opt_t *append_option( struct mod_opt_t *opt_list, char *opt )
 {
 	struct mod_opt_t *ol = opt_list;
 
@@ -234,8 +258,8 @@ static char *parse_command_string( char *src, char **dst )
 	if( opt_status & ( ARG_IN_DQUOTES | ARG_IN_SQUOTES ) ) {
 		bb_error_msg_and_die( "unterminated (single or double) quote in options list: %s", src );
 	}
-	*tmp_str = '\0';
-	*dst = xrealloc( *dst, strlen( *dst ) );
+	*tmp_str++ = '\0';
+	*dst = xrealloc( *dst, (tmp_str - *dst ) );
 	return src;
 }
 #else
@@ -243,8 +267,106 @@ static char *parse_command_string( char *src, char **dst )
 #endif /* ENABLE_FEATURE_MODPROBE_MULTIPLE_OPTIONS */
 
 /*
- * This function builds a list of dependency rules from /lib/modules/`uname -r\modules.dep.
- * It then fills every modules and aliases with their  default options, found by parsing
+ * This function reads aliases and default module options from a configuration file
+ * (/etc/modprobe.conf syntax). It supports includes (only files, no directories).
+ */
+static void include_conf ( struct dep_t **first, struct dep_t **current, char *buffer, int buflen, int fd )
+{
+	int continuation_line = 0;
+
+	// alias parsing is not 100% correct (no correct handling of continuation lines within an alias) !
+
+	while ( reads ( fd, buffer, buflen)) {
+		int l;
+		char *p;
+
+		p = strchr ( buffer, '#' );
+		if ( p )
+			*p = 0;
+
+		l = strlen ( buffer );
+
+		while ( l && isspace ( buffer [l-1] )) {
+			buffer [l-1] = 0;
+			l--;
+		}
+
+		if ( l == 0 ) {
+			continuation_line = 0;
+			continue;
+		}
+
+		if ( !continuation_line ) {
+			if (( strncmp ( buffer, "alias", 5 ) == 0 ) && isspace ( buffer [5] )) {
+				char *alias, *mod;
+
+				if ( parse_tag_value ( buffer + 6, &alias, &mod )) {
+					/* handle alias as a module dependent on the aliased module */
+					if ( !*current ) {
+						(*first) = (*current) = (struct dep_t *) xcalloc ( 1, sizeof ( struct dep_t ));
+					}
+					else {
+						(*current)-> m_next = (struct dep_t *) xcalloc ( 1, sizeof ( struct dep_t ));
+						(*current) = (*current)-> m_next;
+					}
+					(*current)-> m_name  = bb_xstrdup ( alias );
+					(*current)-> m_isalias = 1;
+
+					if (( strcmp ( mod, "off" ) == 0 ) || ( strcmp ( mod, "null" ) == 0 )) {
+						(*current)-> m_depcnt = 0;
+						(*current)-> m_deparr = 0;
+					}
+					else {
+						(*current)-> m_depcnt  = 1;
+						(*current)-> m_deparr  = xmalloc ( 1 * sizeof( char * ));
+						(*current)-> m_deparr[0] = bb_xstrdup ( mod );
+					}
+					(*current)-> m_next    = 0;
+				}
+			}
+			else if (( strncmp ( buffer, "options", 7 ) == 0 ) && isspace ( buffer [7] )) {
+				char *mod, *opt;
+
+				/* split the line in the module/alias name, and options */
+				if ( parse_tag_value ( buffer + 8, &mod, &opt )) {
+					struct dep_t *dt;
+
+					/* find the corresponding module */
+					for ( dt = *first; dt; dt = dt-> m_next ) {
+						if ( strcmp ( dt-> m_name, mod ) == 0 )
+							break;
+					}
+					if ( dt ) {
+						if ( ENABLE_FEATURE_MODPROBE_MULTIPLE_OPTIONS ) {
+							char* new_opt = NULL;
+							while( ( opt = parse_command_string( opt, &new_opt ) ) ) {
+								dt-> m_options = append_option( dt-> m_options, new_opt );
+							}
+						} else {
+							dt-> m_options = append_option( dt-> m_options, opt );
+						}
+					}
+				}
+			}
+			else if (( strncmp ( buffer, "include", 7 ) == 0 ) && isspace ( buffer [7] )) {
+
+				int fdi; char *filename = buffer + 8;
+
+				while ( isspace ( *filename ))
+					filename++;
+
+				if (( fdi = open ( filename, O_RDONLY )) >= 0 ) {
+					include_conf(first, current, buffer, buflen, fdi);
+					close(fdi);
+				}
+			}
+		}
+	}
+}
+
+/*
+ * This function builds a list of dependency rules from /lib/modules/`uname -r`\modules.dep.
+ * It then fills every modules and aliases with their default options, found by parsing
  * modprobe.conf (or modules.conf, or conf.modules).
  */
 static struct dep_t *build_dep ( void )
@@ -254,7 +376,7 @@ static struct dep_t *build_dep ( void )
 	struct dep_t *first = 0;
 	struct dep_t *current = 0;
 	char buffer[2048];
-	char *filename = buffer;
+	char *filename;
 	int continuation_line = 0;
 	int k_version;
 
@@ -262,20 +384,15 @@ static struct dep_t *build_dep ( void )
 	if ( uname ( &un ))
 		bb_error_msg_and_die("can't determine kernel version");
 
-	// check for buffer overflow in following code
-	if ( bb_strlen ( un.release ) > ( sizeof( buffer ) - 64 )) {
-		return 0;
-	}
 	if (un.release[0] == '2') {
 		k_version = un.release[2] - '0';
 	}
 
-	strcpy ( filename, "/lib/modules/" );
-	strcat ( filename, un.release );
-	strcat ( filename, "/modules.dep" );
-
-	if (( fd = open ( filename, O_RDONLY )) < 0 ) {
-
+	filename = bb_xasprintf("/lib/modules/%s/modules.dep", un.release );
+	fd = open ( filename, O_RDONLY );
+	if (ENABLE_FEATURE_CLEAN_UP)
+		free(filename);
+	if (fd < 0) {
 		/* Ok, that didn't work.  Fall back to looking in /lib/modules */
 		if (( fd = open ( "/lib/modules/modules.dep", O_RDONLY )) < 0 ) {
 			return 0;
@@ -283,10 +400,10 @@ static struct dep_t *build_dep ( void )
 	}
 
 	while ( reads ( fd, buffer, sizeof( buffer ))) {
-		int l = bb_strlen ( buffer );
+		int l = strlen ( buffer );
 		char *p = 0;
 
-		while ( isspace ( buffer [l-1] )) {
+		while ( l > 0 && isspace ( buffer [l-1] )) {
 			buffer [l-1] = 0;
 			l--;
 		}
@@ -428,90 +545,36 @@ static struct dep_t *build_dep ( void )
 	}
 	close ( fd );
 
-	// alias parsing is not 100% correct (no correct handling of continuation lines within an alias) !
-
+	/*
+	 * First parse system-specific options and aliases
+	 * as they take precedence over the kernel ones.
+	 */
 	if (!ENABLE_FEATURE_2_6_MODULES
 			|| ( fd = open ( "/etc/modprobe.conf", O_RDONLY )) < 0 )
 		if (( fd = open ( "/etc/modules.conf", O_RDONLY )) < 0 )
-			if (( fd = open ( "/etc/conf.modules", O_RDONLY )) < 0 )
-				return first;
+			fd = open ( "/etc/conf.modules", O_RDONLY );
 
-	continuation_line = 0;
-	while ( reads ( fd, buffer, sizeof( buffer ))) {
-		int l;
-		char *p;
+	if (fd >= 0) {
+		include_conf (&first, &current, buffer, sizeof(buffer), fd);
+		close(fd);
+	}
 
-		p = strchr ( buffer, '#' );
-		if ( p )
-			*p = 0;
-
-		l = bb_strlen ( buffer );
-
-		while ( l && isspace ( buffer [l-1] )) {
-			buffer [l-1] = 0;
-			l--;
+	/* Only 2.6 has a modules.alias file */
+	if (ENABLE_FEATURE_2_6_MODULES) {
+		/* Parse kernel-declared aliases */
+		filename = bb_xasprintf("/lib/modules/%s/modules.alias", un.release);
+		if ((fd = open ( filename, O_RDONLY )) < 0) {
+			/* Ok, that didn't work.  Fall back to looking in /lib/modules */
+			fd = open ( "/lib/modules/modules.alias", O_RDONLY );
 		}
+		if (ENABLE_FEATURE_CLEAN_UP)
+			free(filename);
 
-		if ( l == 0 ) {
-			continuation_line = 0;
-			continue;
-		}
-
-		if ( !continuation_line ) {
-			if (( strncmp ( buffer, "alias", 5 ) == 0 ) && isspace ( buffer [5] )) {
-				char *alias, *mod;
-
-				if ( parse_tag_value ( buffer + 6, &alias, &mod )) {
-					/* handle alias as a module dependent on the aliased module */
-					if ( !current ) {
-						first = current = (struct dep_t *) xcalloc ( 1, sizeof ( struct dep_t ));
-					}
-					else {
-						current-> m_next = (struct dep_t *) xcalloc ( 1, sizeof ( struct dep_t ));
-						current = current-> m_next;
-					}
-					current-> m_name  = bb_xstrdup ( alias );
-					current-> m_isalias = 1;
-
-					if (( strcmp ( mod, "off" ) == 0 ) || ( strcmp ( mod, "null" ) == 0 )) {
-						current-> m_depcnt = 0;
-						current-> m_deparr = 0;
-					}
-					else {
-						current-> m_depcnt  = 1;
-						current-> m_deparr  = xmalloc ( 1 * sizeof( char * ));
-						current-> m_deparr[0] = bb_xstrdup ( mod );
-					}
-					current-> m_next    = 0;
-				}
-			}
-			else if (( strncmp ( buffer, "options", 7 ) == 0 ) && isspace ( buffer [7] )) {
-				char *mod, *opt;
-
-				/* split the line in the module/alias name, and options */
-				if ( parse_tag_value ( buffer + 8, &mod, &opt )) {
-					struct dep_t *dt;
-
-					/* find the corresponding module */
-					for ( dt = first; dt; dt = dt-> m_next ) {
-						if ( strcmp ( dt-> m_name, mod ) == 0 )
-							break;
-					}
-					if ( dt ) {
-						if ( ENABLE_FEATURE_MODPROBE_MULTIPLE_OPTIONS ) {
-							char* new_opt = NULL;
-							while( ( opt = parse_command_string( opt, &new_opt ) ) ) {
-								dt-> m_options = append_option( dt-> m_options, new_opt );
-							}
-						} else {
-							dt-> m_options = append_option( dt-> m_options, opt );
-						}
-					}
-				}
-			}
+		if (fd >= 0) {
+			include_conf (&first, &current, buffer, sizeof(buffer), fd);
+			close(fd);
 		}
 	}
-	close ( fd );
 
 	return first;
 }
@@ -519,7 +582,7 @@ static struct dep_t *build_dep ( void )
 /* return 1 = loaded, 0 = not loaded, -1 = can't tell */
 static int already_loaded (const char *name)
 {
-	int fd;
+	int fd, ret = 0;
 	char buffer[4096];
 
 	fd = open ("/proc/modules", O_RDONLY);
@@ -531,19 +594,30 @@ static int already_loaded (const char *name)
 
 		p = strchr (buffer, ' ');
 		if (p) {
+			const char *n;
+
+			// Truncate buffer at first space and check for matches, with
+			// the idiosyncrasy that _ and - are interchangeable because the
+			// 2.6 kernel does weird things.
+
 			*p = 0;
-			for( p = buffer; ENABLE_FEATURE_2_6_MODULES && *p; p++ ) {
-				*p = ((*p)=='-')?'_':*p;
-			}
-			if (strcmp (name, buffer) == 0) {
-				close (fd);
-				return 1;
+			for (p = buffer, n = name; ; p++, n++) {
+				if (*p != *n) {
+					if ((*p == '_' || *p == '-') && (*n == '_' || *n == '-'))
+						continue;
+					break;
+				}
+				// If we made it to the end, that's a match.
+				if (!*p) {
+					ret = 1;
+					goto done;
+				}
 			}
 		}
 	}
-
+done:
 	close (fd);
-	return 0;
+	return ret;
 }
 
 static int mod_process ( struct mod_list_t *list, int do_insert )
@@ -573,14 +647,16 @@ static int mod_process ( struct mod_list_t *list, int do_insert )
 		if ( do_insert ) {
 			if (already_loaded (list->m_name) != 1) {
 				argv[argc++] = "insmod";
-				if (do_syslog)
-					argv[argc++] = "-s";
-				if (autoclean)
-					argv[argc++] = "-k";
-				if (quiet)
-					argv[argc++] = "-q";
-				else if(verbose) /* verbose and quiet are mutually exclusive */
-					argv[argc++] = "-v";
+				if (ENABLE_FEATURE_2_4_MODULES) {
+					if (do_syslog)
+						argv[argc++] = "-s";
+					if (autoclean)
+						argv[argc++] = "-k";
+					if (quiet)
+						argv[argc++] = "-q";
+					else if(verbose) /* verbose and quiet are mutually exclusive */
+						argv[argc++] = "-v";
+				}
 				argv[argc++] = list-> m_path;
 				if( ENABLE_FEATURE_CLEAN_UP )
 					argc_malloc = argc;
@@ -611,27 +687,8 @@ static int mod_process ( struct mod_list_t *list, int do_insert )
 				printf("%s module %s\n", do_insert?"Loading":"Unloading", list-> m_name );
 			}
 			if (!show_only) {
-				int rc2 = 0;
-				int status;
-				switch (fork()) {
-				case -1:
-					rc2 = 1;
-					break;
-				case 0: //child
-					execvp(argv[0], argv);
-					bb_perror_msg_and_die("exec of %s", argv[0]);
-					/* NOTREACHED */
-				default:
-					if (wait(&status) == -1) {
-						rc2 = 1;
-						break;
-					}
-					if (WIFEXITED(status))
-						rc2 = WEXITSTATUS(status);
-					if (WIFSIGNALED(status))
-						rc2 = WTERMSIG(status);
-					break;
-				}
+				int rc2 = wait4pid(bb_spawn(argv));
+
 				if (do_insert) {
 					rc = rc2; /* only last module matters */
 				}
@@ -667,9 +724,13 @@ static void check_dep ( char *mod, struct mod_list_t **head, struct mod_list_t *
 	struct mod_opt_t *opt = 0;
 	char *path = 0;
 
-	// check dependencies
+	/* Search for the given module name amongst all dependency rules.
+	 * The module name in a dependency rule can be a shell pattern,
+	 * so try to match the given module name against such a pattern.
+	 * Of course if the name in the dependency rule is a plain string,
+	 * then we consider it a pattern, and matching will still work. */
 	for ( dt = depend; dt; dt = dt-> m_next ) {
-		if ( strcmp ( dt-> m_name, mod ) == 0) {
+		if ( fnmatch ( dt-> m_name, mod, 0 ) == 0) {
 			break;
 		}
 	}
@@ -776,7 +837,16 @@ static int mod_insert ( char *mod, int argc, char **argv )
 		}
 
 		// process tail ---> head
-		rc = mod_process ( tail, 1 );
+		if ((rc = mod_process ( tail, 1 )) != 0) {
+			/*
+			 * In case of using udev, multiple instances of modprobe can be
+			 * spawned to load the same module (think of two same usb devices,
+			 * for example; or cold-plugging at boot time). Thus we shouldn't
+			 * fail if the module was loaded, and not by us.
+			 */
+			if (already_loaded (mod) )
+				rc = 0;
+		}
 	}
 	else
 		rc = 1;
@@ -787,7 +857,7 @@ static int mod_insert ( char *mod, int argc, char **argv )
 static int mod_remove ( char *mod )
 {
 	int rc;
-	static struct mod_list_t rm_a_dummy = { "-a", 0, 0 };
+	static struct mod_list_t rm_a_dummy = { "-a", NULL, NULL, NULL, NULL };
 
 	struct mod_list_t *head = 0;
 	struct mod_list_t *tail = 0;
@@ -805,61 +875,28 @@ static int mod_remove ( char *mod )
 
 }
 
-extern int modprobe_main(int argc, char** argv)
+int modprobe_main(int argc, char** argv)
 {
-	int	opt;
 	int rc = EXIT_SUCCESS;
-	int remove_opt = 0;
+	char *unused;
 
-	autoclean = show_only = quiet = do_syslog = verbose = 0;
-
-	while ((opt = getopt(argc, argv, "acdklnqrst:vVC:")) != -1) {
-		switch(opt) {
-			case 'c': // no config used
-			case 'l': // no pattern matching
+	bb_opt_complementally = "?V-:q-v:v-q";
+	main_opts = bb_getopt_ulflags(argc, argv, "acdklnqrst:vVC:",
+							&unused, &unused);
+	if((main_opts & (DUMP_CONF_EXIT | LIST_ALL)))
 				return EXIT_SUCCESS;
-				break;
-			case 'C': // no config used
-			case 't': // no pattern matching
+	if((main_opts & (RESTRICT_DIR | CONFIG_FILE)))
 				bb_error_msg_and_die("-t and -C not supported");
-
-			case 'a': // ignore
-			case 'd': // ignore
-				break;
-			case 'k':
-				autoclean++;
-				break;
-			case 'n':
-				show_only++;
-				break;
-			case 'q':
-				quiet++; verbose=0;
-				break;
-			case 'r':
-				remove_opt++;
-				break;
-			case 's':
-				do_syslog++;
-				break;
-			case 'v':
-				verbose++; quiet=0;
-				break;
-			case 'V':
-			default:
-				bb_show_usage();
-				break;
-		}
-	}
 
 	depend = build_dep ( );
 
 	if ( !depend )
-		bb_error_msg_and_die ( "could not parse modules.dep\n" );
+		bb_error_msg_and_die ( "could not parse modules.dep" );
 
 	if (remove_opt) {
 		do {
 			if (mod_remove ( optind < argc ?
-						bb_xstrdup (argv [optind]) : NULL )) {
+						argv [optind] : NULL )) {
 				bb_error_msg ("failed to remove module %s",
 						argv [optind] );
 				rc = EXIT_FAILURE;
@@ -867,9 +904,9 @@ extern int modprobe_main(int argc, char** argv)
 		} while ( ++optind < argc );
 	} else {
 		if (optind >= argc)
-			bb_error_msg_and_die ( "No module or pattern provided\n" );
+			bb_error_msg_and_die ( "No module or pattern provided" );
 
-		if ( mod_insert ( bb_xstrdup ( argv [optind] ), argc - optind - 1, argv + optind + 1 ))
+		if ( mod_insert ( argv [optind], argc - optind - 1, argv + optind + 1 ))
 			bb_error_msg_and_die ( "failed to load module %s", argv [optind] );
 	}
 

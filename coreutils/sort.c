@@ -4,19 +4,9 @@
  *
  * Copyright (C) 2004 by Rob Landley <rob@landley.net>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * MAINTAINER: Rob Landley <rob@landley.net>
+ * 
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  *
  * See SuS3 sort standard at:
  * http://www.opengroup.org/onlinepubs/007904975/utilities/sort.html
@@ -84,9 +74,7 @@ static char *get_key(char *str, struct sort_key *key, int flags)
 			for(i=1;i<key->range[2*j]+j;i++) {
 				/* Skip leading blanks or first separator */
 				if(str[end]) {
-					if(key_separator) {
-						if(str[end]==key_separator) end++;
-					} else if(isspace(str[end]))
+					if(!key_separator && isspace(str[end]))
 						while(isspace(str[end])) end++;
 				}
 				/* Skip body of key */
@@ -142,7 +130,7 @@ static struct sort_key *add_key(void)
 	return *pkey=xcalloc(1,sizeof(struct sort_key));
 }
 
-#define GET_LINE(fp) (global_flags&FLAG_z) ? bb_get_chunk_from_file(fp) \
+#define GET_LINE(fp) (global_flags&FLAG_z) ? bb_get_chunk_from_file(fp,NULL) \
 										   : bb_get_chomped_line_from_file(fp)
 #else
 #define GET_LINE(fp)		bb_get_chomped_line_from_file(fp)
@@ -156,7 +144,7 @@ static int compare_keys(const void *xarg, const void *yarg)
 
 #ifdef CONFIG_FEATURE_SORT_BIG
 	struct sort_key *key;
-	
+
 	for(key=key_list;!retval && key;key=key->next_key) {
 		flags=(key->flags) ? key->flags : global_flags;
 		/* Chop out and modify key chunks, handling -dfib */
@@ -186,12 +174,14 @@ static int compare_keys(const void *xarg, const void *yarg)
 				/* not numbers < NaN < -infinity < numbers < +infinity) */
 				if(x==xx) retval=(y==yy ? 0 : -1);
 				else if(y==yy) retval=1;
-				else if(isnan(dx)) retval=isnan(dy) ? 0 : -1;
-				else if(isnan(dy)) retval=1;
-				else if(isinf(dx)) {
-					if(dx<0) retval=((isinf(dy) && dy<0) ? 0 : -1);
-					else retval=((isinf(dy) && dy>0) ? 0 : 1);
-				} else if(isinf(dy)) retval=dy<0 ? 1 : -1;
+				/* Check for isnan */
+				else if(dx != dx) retval = (dy != dy) ? 0 : -1;
+				else if(dy != dy) retval = 1;
+				/* Check for infinity.  Could underflow, but it avoids libm. */
+				else if(1.0/dx == 0.0) {
+					if(dx<0) retval=((1.0/dy == 0.0 && dy<0) ? 0 : -1);
+					else retval=((1.0/dy == 0.0 && dy>0) ? 0 : 1);
+				} else if(1.0/dy == 0.0) retval=dy<0 ? 1 : -1;
 				else retval=dx>dy ? 1 : (dx<dy ? -1 : 0);
 				break;
 			}
@@ -246,7 +236,7 @@ int sort_main(int argc, char **argv)
 	bb_default_error_retval = 2;
 	/* Parse command line options */
 	while((c=getopt(argc,argv,optlist))>0) {
-		line=index(optlist,c);
+		line=strchr(optlist,c);
 		if(!line) bb_show_usage();
 		switch(*line) {
 #ifdef CONFIG_FEATURE_SORT_BIG
@@ -277,7 +267,7 @@ int sort_main(int argc, char **argv)
 							break;
 						} /* no else needed: fall through to syntax error
 							 because comma isn't in optlist */
-						temp2=index(optlist,*temp);
+						temp2=strchr(optlist,*temp);
 						flag=(1<<(temp2-optlist));
 						if(!temp2 || (flag>FLAG_M && flag<FLAG_b))
 							bb_error_msg_and_die("Unknown key option.");
@@ -312,7 +302,7 @@ int sort_main(int argc, char **argv)
 #ifdef CONFIG_FEATURE_SORT_BIG
 	/* if no key, perform alphabetic sort */
     if(!key_list) add_key()->range[0]=1;
-	/* handle -c */	
+	/* handle -c */
 	if(global_flags&FLAG_c) {
 		int j=(global_flags&FLAG_u) ? -1 : 0;
 		for(i=1;i<linecount;i++)

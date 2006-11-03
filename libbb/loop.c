@@ -56,15 +56,15 @@ char *query_loop(const char *device)
 	int fd;
 	bb_loop_info loopinfo;
 	char *dev=0;
-	
+
 	if ((fd = open(device, O_RDONLY)) < 0) return 0;
 	if (!ioctl(fd, BB_LOOP_GET_STATUS, &loopinfo))
 		dev=bb_xasprintf("%ld %s", (long) loopinfo.lo_offset,
-				loopinfo.lo_file_name);
+				(char *)loopinfo.lo_file_name);
 	close(fd);
 
 	return dev;
-}	
+}
 
 
 int del_loop(const char *device)
@@ -74,7 +74,7 @@ int del_loop(const char *device)
 	if ((fd = open(device, O_RDONLY)) < 0) return 1;
 	rc=ioctl(fd, LOOP_CLR_FD, 0);
 	close(fd);
-	
+
 	return rc;
 }
 
@@ -90,23 +90,24 @@ int set_loop(char **device, const char *file, int offset)
 	bb_loop_info loopinfo;
 	struct stat statbuf;
 	int i, dfd, ffd, mode, rc=-1;
-
+	
 	/* Open the file.  Barf if this doesn't work.  */
 	if((ffd = open(file, mode=O_RDWR))<0 && (ffd = open(file,mode=O_RDONLY))<0)
-		return errno;
+		return -errno;
 
 	/* Find a loop device.  */
 	try=*device ? : dev;
 	for(i=0;rc;i++) {
-		sprintf(dev, LOOP_FORMAT, i++);
+		sprintf(dev, LOOP_FORMAT, i);
+
 		/* Ran out of block devices, return failure.  */
 		if(stat(try, &statbuf) || !S_ISBLK(statbuf.st_mode)) {
-			rc=ENOENT;
+			rc=-ENOENT;
 			break;
 		}
 		/* Open the sucker and check its loopiness.  */
 		if((dfd=open(try, mode))<0 && errno==EROFS)
-			dfd=open(try,mode=O_RDONLY);
+			dfd=open(try, mode = O_RDONLY);
 		if(dfd<0) goto try_again;
 
 		rc=ioctl(dfd, BB_LOOP_GET_STATUS, &loopinfo);
@@ -114,18 +115,20 @@ int set_loop(char **device, const char *file, int offset)
 		/* If device free, claim it.  */
 		if(rc && errno==ENXIO) {
 			memset(&loopinfo, 0, sizeof(loopinfo));
-			safe_strncpy(loopinfo.lo_file_name, file, LO_NAME_SIZE);
+			safe_strncpy((char *)loopinfo.lo_file_name, file, LO_NAME_SIZE);
 			loopinfo.lo_offset = offset;
 			/* Associate free loop device with file.  */
-			if(!ioctl(dfd, LOOP_SET_FD, ffd) &&
-			   !ioctl(dfd, BB_LOOP_SET_STATUS, &loopinfo)) rc=0;
-			else ioctl(dfd, LOOP_CLR_FD, 0);
+			if(!ioctl(dfd, LOOP_SET_FD, ffd)) {
+				if (!ioctl(dfd, BB_LOOP_SET_STATUS, &loopinfo)) rc=0;
+				else ioctl(dfd, LOOP_CLR_FD, 0);
+			}
+
 		/* If this block device already set up right, re-use it.
 		   (Yes this is racy, but associating two loop devices with the same
 		   file isn't pretty either.  In general, mounting the same file twice
 		   without using losetup manually is problematic.)
 		 */
-		} else if(strcmp(file,loopinfo.lo_file_name)
+		} else if(strcmp(file,(char *)loopinfo.lo_file_name)
 					|| offset!=loopinfo.lo_offset) rc=-1;
 		close(dfd);
 try_again:
@@ -137,12 +140,3 @@ try_again:
 		return mode==O_RDONLY ? 1 : 0;
 	} else return rc;
 }
-
-/* END CODE */
-/*
-Local Variables:
-c-file-style: "linux"
-c-basic-offset: 4
-tab-width: 4
-End:
-*/

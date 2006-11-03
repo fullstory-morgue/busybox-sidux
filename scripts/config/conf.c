@@ -38,7 +38,7 @@ static char nohelp_text[] = "Sorry, no help available for this option yet.\n";
 
 static void strip(char *str)
 {
-	signed char *p = str;
+	char *p = str;
 	int l;
 
 	while ((isspace(*p)))
@@ -528,7 +528,7 @@ int main(int ac, char **av)
 			exit(0);
 		}
 	}
-  	name = av[i];
+	name = av[i];
 	if (!name) {
 		printf("%s: configuration file missing\n", av[0]);
 	}

@@ -11,7 +11,7 @@
  *    lenient.  See the various glibc difference comments below.
  *
  *  TODO:
- *    Move to dynamic allocation of (currently staticly allocated)
+ *    Move to dynamic allocation of (currently statically allocated)
  *      buffers; especially for the group-related functions since
  *      large group member lists will cause error returns.
  *
@@ -26,10 +26,11 @@
 #include <errno.h>
 #include <assert.h>
 #include <ctype.h>
-#include "busybox.h"
+
 #include "pwd_.h"
 #include "grp_.h"
 #include "shadow_.h"
+#include "libbb.h"
 
 #ifndef _PATH_SHADOW
 #define	_PATH_SHADOW	"/etc/shadow"
@@ -42,7 +43,7 @@
 #endif
 
 /**********************************************************************/
-/* Sizes for staticly allocated buffers. */
+/* Sizes for statically allocated buffers. */
 
 /* If you change these values, also change _SC_GETPW_R_SIZE_MAX and
  * _SC_GETGR_R_SIZE_MAX in libc/unistd/sysconf.c to match */

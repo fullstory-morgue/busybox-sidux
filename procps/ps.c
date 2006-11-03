@@ -7,6 +7,7 @@
  * Licensed under the GPL v2, see the file LICENSE in this tarball.
  */
 
+#include "busybox.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -17,12 +18,11 @@
 #include <string.h>
 #include <termios.h>
 #include <sys/ioctl.h>
-#include "busybox.h"
 #if ENABLE_SELINUX
 #include <selinux/selinux.h>  /* for is_selinux_enabled()  */
 #endif
 
-extern int ps_main(int argc, char **argv)
+int ps_main(int argc, char **argv)
 {
 	procps_status_t * p;
 	int i, len;
@@ -111,14 +111,14 @@ extern int ps_main(int argc, char **argv)
 		if(namecmd && namecmd[0]) {
 			if(i < 0)
 				i = 0;
-			if(strlen(namecmd) > i)
+			if(strlen(namecmd) > (size_t)i)
 				namecmd[i] = 0;
 			printf("%s\n", namecmd);
 		} else {
 			namecmd = p->short_cmd;
 			if(i < 2)
 				i = 2;
-			if(strlen(namecmd) > (i-2))
+			if(strlen(namecmd) > ((size_t)i-2))
 				namecmd[i-2] = 0;
 			printf("[%s]\n", namecmd);
 		}

@@ -4,22 +4,10 @@
  *
  * Copyright (C) 1999-2004 by Erik Andersen <andersen@codepoet.org>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
+#include "busybox.h"
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
@@ -29,7 +17,6 @@
 #include <string.h>
 #include <sys/utsname.h>
 #include <sys/syscall.h>
-#include "busybox.h"
 
 #ifdef CONFIG_FEATURE_2_6_MODULES
 static inline void filename2modname(char *modname, const char *afterslash)
@@ -38,7 +25,7 @@ static inline void filename2modname(char *modname, const char *afterslash)
 
 #if ENABLE_FEATURE_2_4_MODULES
 	int kr_chk = 1;
-	if (get_kernel_revision() <= 2*65536+6*256)
+	if (get_linux_version_code() <= KERNEL_VERSION(2,6,0))
 		kr_chk = 0;
 #else
 #define kr_chk 1
@@ -55,12 +42,12 @@ static inline void filename2modname(char *modname, const char *afterslash)
 }
 #endif
 
-extern int rmmod_main(int argc, char **argv)
+int rmmod_main(int argc, char **argv)
 {
 	int n, ret = EXIT_SUCCESS;
 	unsigned int flags = O_NONBLOCK|O_EXCL;
 #ifdef CONFIG_FEATURE_QUERY_MODULE_INTERFACE
-	/* bb_common_bufsiz1 hold the module names which we ignore 
+	/* bb_common_bufsiz1 hold the module names which we ignore
 	   but must get */
 	size_t bufsize = sizeof(bb_common_bufsiz1);
 #endif
@@ -76,7 +63,7 @@ extern int rmmod_main(int argc, char **argv)
 		/* until the number of modules does not change */
 		size_t nmod = 0; /* number of modules */
 		size_t pnmod = -1; /* previous number of modules */
-		                
+
 		while (nmod != pnmod) {
 			if (syscall(__NR_delete_module, NULL, flags) != 0) {
 				if (errno==EFAULT)
@@ -101,7 +88,7 @@ extern int rmmod_main(int argc, char **argv)
 #ifdef CONFIG_FEATURE_2_6_MODULES
 		const char *afterslash;
 		char *module_name;
-		
+
 		afterslash = strrchr(argv[n], '/');
 		if (!afterslash)
 			afterslash = argv[n];

@@ -6,24 +6,11 @@
  *
  * Maintainer: Gennady Feldman <gfeldman@gena01.com> as of Mar 12, 2001
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
- * 02111-1307 USA
- *
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
 
+#include "busybox.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,7 +21,6 @@
 #include <signal.h>
 #include <setjmp.h>
 #include <unistd.h>
-#include "busybox.h"
 
 static const long KEY_ID = 0x414e4547; /*"GENA"*/
 
@@ -75,12 +61,12 @@ static inline void sem_down(int semid)
 		error_exit("semop[SMrdn]");
 }
 
-extern int logread_main(int argc, char **argv)
+int logread_main(int argc, char **argv)
 {
 	int i;
 	int follow=0;
 
-	if (argc == 2 && strcmp(argv[1],"-f")==0) {
+	if (argc == 2 && argv[1][0]=='-' && argv[1][1]=='f') {
 		follow = 1;
 	} else {
 		/* no options, no getopt */
@@ -88,7 +74,7 @@ extern int logread_main(int argc, char **argv)
 			bb_show_usage();
 	}
 
-	// handle intrrupt signal
+	// handle interrupt signal
 	if (setjmp(jmp_env)) goto output_end;
 
 	// attempt to redefine ^C signal
@@ -102,7 +88,7 @@ extern int logread_main(int argc, char **argv)
 		error_exit("Can't get access to circular buffer from syslogd");
 
 	if ( (log_semid = semget(KEY_ID, 0, 0)) == -1)
-	    	error_exit("Can't get access to semaphone(s) for circular buffer from syslogd");
+		error_exit("Can't get access to semaphone(s) for circular buffer from syslogd");
 
 	// Suppose atomic memory move
 	i = follow ? buf->tail : buf->head;
@@ -131,9 +117,7 @@ extern int logread_main(int argc, char **argv)
 		log_len = buf->tail - i;
 		if (log_len < 0)
 			log_len += buf->size;
-		buf_data = (char *)malloc(log_len);
-		if (!buf_data)
-			error_exit("malloc failed");
+		buf_data = (char *)xmalloc(log_len);
 
 		if (buf->tail < i) {
 			memcpy(buf_data, buf->data+i, buf->size-i);
@@ -178,7 +162,7 @@ static void interrupted(int sig){
 }
 
 static void error_exit(const char *str){
-	perror(str);
+	bb_perror_msg(str);
 	//release all acquired resources
 	if (log_shmid != -1)
 		shmdt(buf);

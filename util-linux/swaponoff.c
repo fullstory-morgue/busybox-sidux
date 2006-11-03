@@ -7,24 +7,20 @@
  * Licensed under the GPL v2, see the file LICENSE in this tarball.
  */
 
-#include <stdio.h>
+#include "busybox.h"
 #include <mntent.h>
 #include <dirent.h>
 #include <errno.h>
 #include <string.h>
-#include <stdlib.h>
-#include <sys/mount.h>
 #include <sys/swap.h>
 
-#include "busybox.h"
 
 static int swap_enable_disable(const char *device)
 {
 	int status;
 	struct stat st;
 
-	if (stat(device, &st) < 0)
-		bb_perror_msg_and_die("cannot stat %s", device);
+	xstat(device, &st);
 
 	/* test for holes */
 	if (S_ISREG(st.st_mode))
@@ -66,7 +62,7 @@ static int do_em_all(void)
 
 #define DO_ALL    0x01
 
-extern int swap_on_off_main(int argc, char **argv)
+int swap_on_off_main(int argc, char **argv)
 {
 	int ret;
 

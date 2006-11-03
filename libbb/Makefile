@@ -4,11 +4,21 @@
 #
 # Licensed under the GPL v2, see the file LICENSE in this tarball.
 
+ifndef top_srcdir
 top_srcdir=..
+endif
+ifndef top_builddir
 top_builddir=..
+endif
 srcdir=$(top_srcdir)/libbb
 LIBBB_DIR:=./
-include $(top_builddir)/Rules.mak
+
+# Ensure "all" is still the default target when make is run by itself in
+# libbb, even if the files we include define rules for targets.
+
+all:
+
+include $(top_srcdir)/Rules.mak
 include $(top_builddir)/.config
 include Makefile.in
 all: $(libraries-y)

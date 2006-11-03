@@ -4,7 +4,9 @@
 [ -n "$bindir" ] || bindir=$(dirname $(pwd))
 PATH=$bindir:$PATH
 
-run_applet_testcase ()
+# Run old-style test.
+
+function run_applet_testcase
 {
 	local applet=$1
 	local testcase=$2
@@ -31,16 +33,15 @@ run_applet_testcase ()
 
 	rm -rf tmp
 	mkdir -p tmp
-	pushd tmp >/dev/null
+	pushd tmp > /dev/null
 
-	d=$srcdir sh -x -e $testcase >.logfile.txt 2>&1
+	d=$srcdir sh -x -e $testcase >.logfile.txt 2>&1 || status=$?
 
-	if [ $? != 0 ] ; then
+	if [ $status -ne 0 ] ; then
 		echo FAIL: $testname
 		if [ $verbose -gt 0 ]; then
 			cat .logfile.txt
-			#exit 1;
-		fi;
+		fi
 		status=$?
 	else
 		echo PASS: $testname
@@ -48,7 +49,7 @@ run_applet_testcase ()
 		status=$?
 	fi
 
-	popd >/dev/null
+	popd > /dev/null
 	rm -rf tmp
 
 	return $status
@@ -91,10 +92,20 @@ else
 	applets=$(ls $srcdir)
 fi
 
+# Populate a directory with links to all busybox applets
+
+LINKSDIR="${bindir}/runtest-tempdir-links"
+rm -rf "$LINKSDIR" 2>/dev/null
+mkdir "$LINKSDIR"
+for i in $(sed 's@/[a-z0-9/\[]*/@@' $bindir/busybox.links 2>/dev/null)
+do
+	ln -s $bindir/busybox "$LINKSDIR"/$i
+done
+
 # Set up option flags so tests can be selective.
 
 configfile=${bindir:-../../}/.config
-export OPTIONFLAGS=:$(echo $(sed -nr 's/^CONFIG_(.*)=.*/\1/p' $configfile) | sed 's/ /:/')
+export OPTIONFLAGS=:$(echo $(sed -nr 's/^CONFIG_(.*)=.*/\1/p' $configfile) | sed 's/ /:/g')
 
 for applet in $applets; do
 	if [ "$applet" = "links" ]; then continue; fi
@@ -110,25 +121,20 @@ for applet in $applets; do
 	applet=$(echo "$applet" | sed -n 's/\.tests$//p')
 	if [ ${#applet} -ne 0 ]
 	then
-		appcfg=`grep -i "^# CONFIG_$applet" $configfile`
-		if [ -n "$appcfg" ]
+		if [ ! -h "$LINKSDIR/$applet" ] && [ "${applet:0:4}" != "all_" ]
 		then
-			echo "SKIPPED: $applet (is configured out)"
+			echo "SKIPPED: $applet (not built)"
 			continue
 		fi
-		# Setup environment for test.
-		if [ -d links ]; then
-			rm -f links/"$applet" 
-		else
-			mkdir links 2> /dev/null
-		fi
-		ln -s ${bindir:-../..}/busybox links/"$applet"
-		PATH="$srcdir:$PATH" COMMAND="links/$applet" \
+		if PATH="$LINKSDIR":$srcdir:$bindir:$PATH \
 			"${srcdir:-.}/$applet".tests
-		if [ $? -ne 0 ]; then status=1; fi
+		then
+		  :
+		else
+		  status=1
+		fi
 	fi
 
 done
-rm -f links/*
-rmdir links
+rm -rf "$LINKSDIR"
 exit $status

@@ -1,17 +1,6 @@
-/*
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+/* Copyright 2001 Glenn McGrath.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU Library General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
 #include <stdio.h>
@@ -21,20 +10,20 @@
 #include "unarchive.h"
 #include "libbb.h"
 
-extern char get_header_ar(archive_handle_t *archive_handle)
+char get_header_ar(archive_handle_t *archive_handle)
 {
 	file_header_t *typed = archive_handle->file_header;
 	union {
 		char raw[60];
-	 	struct {
- 			char name[16];
- 			char date[12];
- 			char uid[6];
- 			char gid[6];
- 			char mode[8];
- 			char size[10];
- 			char magic[2];
- 		} formated;
+		struct {
+			char name[16];
+			char date[12];
+			char uid[6];
+			char gid[6];
+			char mode[8];
+			char size[10];
+			char magic[2];
+		} formated;
 	} ar;
 #ifdef CONFIG_FEATURE_AR_LONG_FILENAMES
 	static char *ar_long_names;
@@ -102,7 +91,7 @@ extern char get_header_ar(archive_handle_t *archive_handle)
 #endif
 	} else {
 		/* short filenames */
-               typed->name = bb_xstrndup(ar.formated.name, 16);
+	       typed->name = bb_xstrndup(ar.formated.name, 16);
 	}
 
 	typed->name[strcspn(typed->name, " /")] = '\0';

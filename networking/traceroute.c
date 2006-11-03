@@ -1,3 +1,4 @@
+/* vi: set sw=4 ts=4: */
 /*
  * Copyright (c) 1988, 1989, 1991, 1994, 1995, 1996, 1997, 1998, 1999, 2000
  *      The Regents of the University of California.  All rights reserved.
@@ -204,13 +205,11 @@
 //#define CONFIG_FEATURE_TRACEROUTE_USE_ICMP
 
 #include <errno.h>
-#include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <malloc.h>
 #include <netdb.h>
 #include <endian.h>
 #include <getopt.h>
@@ -219,7 +218,6 @@
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#include <sys/time.h>                           /* concession to AIX */
 #include <sys/select.h>
 #include "inet_common.h"
 
@@ -243,8 +241,8 @@
  * Overlay for ip header used by other protocols (tcp, udp).
  */
 struct ipovly {
-	u_char  ih_x1[9];               /* (unused) */
-	u_char  ih_pr;                  /* protocol */
+	unsigned char  ih_x1[9];               /* (unused) */
+	unsigned char  ih_pr;                  /* protocol */
 	short   ih_len;                 /* protocol length */
 	struct  in_addr ih_src;         /* source internet address */
 	struct  in_addr ih_dst;         /* destination internet address */
@@ -279,9 +277,9 @@ struct hostinfo {
 
 /* Data section of the probe packet */
 struct outdata {
-	u_char seq;             /* sequence number of this packet */
-	u_char ttl;             /* ttl packet left with */
-	struct timeval tv __attribute__((packed)); /* time packet left */
+	unsigned char seq;             /* sequence number of this packet */
+	unsigned char ttl;             /* ttl packet left with */
+	struct timeval tv ATTRIBUTE_PACKED; /* time packet left */
 };
 
 struct IFADDRLIST {
@@ -293,7 +291,7 @@ struct IFADDRLIST {
 static const char route[] = "/proc/net/route";
 
 /* last inbound (icmp) packet */
-static u_char  packet[512] __attribute__((align (32)));
+static unsigned char  packet[512] ATTRIBUTE_ALIGNED(32);
 
 static struct ip *outip;               /* last output (udp) packet */
 static struct udphdr *outudp;          /* last output (udp) packet */
@@ -359,9 +357,7 @@ ifaddrlist(struct IFADDRLIST **ipaddrp)
 	struct ifreq ibuf[(32 * 1024) / sizeof(struct ifreq)], ifr;
 	struct IFADDRLIST *st_ifaddrlist;
 
-	fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (fd < 0)
-		bb_perror_msg_and_die("socket");
+	fd = bb_xsocket(AF_INET, SOCK_DGRAM, 0);
 
 	ifc.ifc_len = sizeof(ibuf);
 	ifc.ifc_buf = (caddr_t)ibuf;
@@ -371,7 +367,7 @@ ifaddrlist(struct IFADDRLIST **ipaddrp)
 		if (errno == EINVAL)
 			bb_error_msg_and_die(
 			    "SIOCGIFCONF: ifreq struct too small (%d bytes)",
-			    sizeof(ibuf));
+			    (int)sizeof(ibuf));
 		else
 			bb_perror_msg_and_die("SIOCGIFCONF");
 	}
@@ -596,7 +592,7 @@ in_cksum(u_short *addr, int len)
 
 	/* mop up an odd byte, if necessary */
 	if (nleft == 1)
-		sum += *(u_char *)w;
+		sum += *(unsigned char *)w;
 
 	/*
 	 * add back carry outs from top 16 bits to low 16 bits
@@ -689,7 +685,7 @@ send_probe(int seq, int ttl, struct timeval *tp)
 		if (packlen & 1) {
 			if ((i % 8) == 0)
 				printf("\n\t");
-			printf(" %02x", *(u_char *)sp);
+			printf(" %02x", *(unsigned char *)sp);
 		}
 		printf("]\n");
 	}
@@ -728,7 +724,7 @@ deltaT(struct timeval *t1p, struct timeval *t2p)
  * Convert an ICMP "type" field to a printable string.
  */
 static inline const char *
-pr_type(u_char t)
+pr_type(unsigned char t)
 {
 	static const char * const ttab[] = {
 	"Echo Reply",   "ICMP 1",       "ICMP 2",       "Dest Unreachable",
@@ -746,10 +742,10 @@ pr_type(u_char t)
 #endif
 
 static int
-packet_ok(u_char *buf, int cc, struct sockaddr_in *from, int seq)
+packet_ok(unsigned char *buf, int cc, struct sockaddr_in *from, int seq)
 {
 	struct icmp *icp;
-	u_char type, code;
+	unsigned char type, code;
 	int hlen;
 	struct ip *ip;
 
@@ -790,7 +786,7 @@ packet_ok(u_char *buf, int cc, struct sockaddr_in *from, int seq)
 			    icp->icmp_seq == htons(seq))
 				return -2;
 
-			hicmp = (struct icmp *)((u_char *)hip + hlen);
+			hicmp = (struct icmp *)((unsigned char *)hip + hlen);
 			/* XXX 8 is a magic number */
 			if (hlen + 8 <= cc &&
 			    hip->ip_p == IPPROTO_ICMP &&
@@ -800,7 +796,7 @@ packet_ok(u_char *buf, int cc, struct sockaddr_in *from, int seq)
 		} else
 #endif
 		      {
-			up = (struct udphdr *)((u_char *)hip + hlen);
+			up = (struct udphdr *)((unsigned char *)hip + hlen);
 			/* XXX 8 is a magic number */
 			if (hlen + 12 <= cc &&
 			    hip->ip_p == IPPROTO_UDP &&
@@ -850,7 +846,7 @@ inetname(struct sockaddr_in *from)
 }
 
 static inline void
-print(u_char *buf, int cc, struct sockaddr_in *from)
+print(unsigned char *buf, int cc, struct sockaddr_in *from)
 {
 	struct ip *ip;
 	int hlen;
@@ -902,10 +898,8 @@ gethostinfo(const char *host)
 static void
 freehostinfo(struct hostinfo *hi)
 {
-	if (hi->name != NULL) {
-		free(hi->name);
-		hi->name = NULL;
-	}
+	free(hi->name);
+	hi->name = NULL;
 	free((char *)hi->addrs);
 	free((char *)hi);
 }
@@ -928,7 +922,7 @@ traceroute_main(int argc, char *argv[])
 {
 	int code, n;
 	char *cp;
-	u_char *outp;
+	unsigned char *outp;
 	u_int32_t *ap;
 	struct sockaddr_in *from = (struct sockaddr_in *)&wherefrom;
 	struct sockaddr_in *to = (struct sockaddr_in *)&whereto;
@@ -947,7 +941,6 @@ traceroute_main(int argc, char *argv[])
 #endif
 	u_short off = 0;
 	struct IFADDRLIST *al;
-	int uid = getuid();
 	char *device = NULL;
 	int max_ttl = 30;
 	char *max_ttl_str = NULL;
@@ -1010,14 +1003,13 @@ traceroute_main(int argc, char *argv[])
 	if(port_str)
 		port = (u_short)str2val(port_str, "port", 1, (1 << 16) - 1);
 	if(nprobes_str)
-		nprobes = str2val(optarg, "nprobes", 1, -1);
+		nprobes = str2val(nprobes_str, "nprobes", 1, -1);
 	if(source) {
 	    /*
 	     * set the ip source address of the outbound
 	     * probe (e.g., on a multi-homed host).
 	     */
-	     if (uid)
-		bb_error_msg_and_die("-s %s: Permission denied", source);
+	     if (getuid()) bb_error_msg_and_die("-s %s: Permission denied", source);
 	}
 	if(waittime_str)
 		waittime = str2val(waittime_str, "wait time", 2, 24 * 60 * 60);
@@ -1093,8 +1085,7 @@ traceroute_main(int argc, char *argv[])
 	if (n > 2)
 		close(n);
 
-	if ((s = socket(AF_INET, SOCK_RAW, pe->p_proto)) < 0)
-		bb_perror_msg_and_die(bb_msg_can_not_create_raw_socket);
+	s = bb_xsocket(AF_INET, SOCK_RAW, pe->p_proto);
 
 #ifdef CONFIG_FEATURE_TRACEROUTE_SO_DEBUG
 	if (op & USAGE_OP_DEBUG)
@@ -1105,14 +1096,12 @@ traceroute_main(int argc, char *argv[])
 		(void)setsockopt(s, SOL_SOCKET, SO_DONTROUTE, (char *)&on,
 		    sizeof(on));
 
-	sndsock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-	if (sndsock < 0)
-		bb_perror_msg_and_die(bb_msg_can_not_create_raw_socket);
+	sndsock = bb_xsocket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 
 #ifdef CONFIG_FEATURE_TRACEROUTE_SOURCE_ROUTE
 #if defined(IP_OPTIONS)
 	if (lsrr > 0) {
-		u_char optlist[MAX_IPOPTLEN];
+		unsigned char optlist[MAX_IPOPTLEN];
 
 		cp = "ip";
 		if ((pe = getprotobyname(cp)) == NULL)
@@ -1169,8 +1158,8 @@ traceroute_main(int argc, char *argv[])
 		    sizeof(on));
 
 	/* Revert to non-privileged user after opening sockets */
-	setgid(getgid());
-	setuid(uid);
+	xsetgid(getgid());
+	xsetuid(getuid());
 
 	outip = (struct ip *)xcalloc(1, (unsigned)packlen);
 
@@ -1179,10 +1168,10 @@ traceroute_main(int argc, char *argv[])
 		outip->ip_tos = tos;
 	outip->ip_len = htons(packlen);
 	outip->ip_off = htons(off);
-	outp = (u_char *)(outip + 1);
+	outp = (unsigned char *)(outip + 1);
 	outip->ip_dst = to->sin_addr;
 
-	outip->ip_hl = (outp - (u_char *)outip) >> 2;
+	outip->ip_hl = (outp - (unsigned char *)outip) >> 2;
 	ident = (getpid() & 0xffff) | 0x8000;
 #ifdef CONFIG_FEATURE_TRACEROUTE_USE_ICMP
 	if (useicmp) {
@@ -1259,9 +1248,7 @@ traceroute_main(int argc, char *argv[])
 
 	outip->ip_src = from->sin_addr;
 #ifndef IP_HDRINCL
-	if (bind(sndsock, (struct sockaddr *)from, sizeof(*from)) < 0) {
-		bb_perror_msg_and_die("bind");
-	}
+	bb_xbind(sndsock, (struct sockaddr *)from, sizeof(*from));
 #endif
 
 	fprintf(stderr, "traceroute to %s (%s)", hostname, inet_ntoa(to->sin_addr));

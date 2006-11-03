@@ -7,20 +7,7 @@
  * Loosely based on original busybox unzip applet by Laurence Anderson.
  * All options and features should work in this version.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
+ * Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  */
 
 /* For reference see
@@ -45,7 +32,7 @@
 #include "unarchive.h"
 #include "busybox.h"
 
-#if (BYTE_ORDER == BIG_ENDIAN)
+#if BB_BIG_ENDIAN
 static inline unsigned short
 __swap16(unsigned short x) {
 	return (((uint16_t)(x) & 0xFF) << 8) | (((uint16_t)(x) & 0xFF00) >> 8);
@@ -58,10 +45,10 @@ __swap32(uint32_t x) {
 		((x & 0xFF0000) >> 8) |
 		((x & 0xFF000000) >> 24));
 }
-#else
-#define __swap16(x) (x)
-#define __swap32(x) (x)
-#endif
+#else /* it's little-endian */
+# define __swap16(x) (x)
+# define __swap32(x) (x)
+#endif /* BB_BIG_ENDIAN */
 
 #define ZIP_FILEHEADER_MAGIC		__swap32(0x04034b50)
 #define ZIP_CDS_MAGIC			__swap32(0x02014b50)
@@ -79,12 +66,12 @@ typedef union {
 		unsigned short method;	/* 4-5 */
 		unsigned short modtime;	/* 6-7 */
 		unsigned short moddate;	/* 8-9 */
-		unsigned int crc32 __attribute__ ((packed));   	/* 10-13 */
-		unsigned int cmpsize __attribute__ ((packed)); 	/* 14-17 */
-		unsigned int ucmpsize __attribute__ ((packed));	/* 18-21 */
+		unsigned int crc32 ATTRIBUTE_PACKED;	/* 10-13 */
+		unsigned int cmpsize ATTRIBUTE_PACKED;	/* 14-17 */
+		unsigned int ucmpsize ATTRIBUTE_PACKED;	/* 18-21 */
 		unsigned short filename_len;	/* 22-23 */
 		unsigned short extra_len;		/* 24-25 */
-	} formated __attribute__ ((packed));
+	} formated ATTRIBUTE_PACKED;
 } zip_header_t;
 
 static void unzip_skip(int fd, off_t skip)
@@ -99,7 +86,7 @@ static void unzip_skip(int fd, off_t skip)
 static void unzip_read(int fd, void *buf, size_t count)
 {
 	if (bb_xread(fd, buf, count) != count) {
-		bb_error_msg_and_die("Read failure");
+		bb_error_msg_and_die(bb_msg_read_error);
 	}
 }
 
@@ -108,12 +95,12 @@ static void unzip_create_leading_dirs(char *fn)
 	/* Create all leading directories */
 	char *name = bb_xstrdup(fn);
 	if (bb_make_directory(dirname(name), 0777, FILEUTILS_RECUR)) {
-		bb_error_msg_and_die("Failed to create directory");
+		bb_error_msg_and_die("Exiting"); /* bb_make_directory is noisy */
 	}
 	free(name);
 }
 
-static void unzip_extract(zip_header_t *zip_header, int src_fd, int dst_fd)
+static int unzip_extract(zip_header_t *zip_header, int src_fd, int dst_fd)
 {
 	if (zip_header->formated.method == 0) {
 		/* Method 0 - stored (not compressed) */
@@ -130,15 +117,18 @@ static void unzip_extract(zip_header_t *zip_header, int src_fd, int dst_fd)
 		/* Validate decompression - crc */
 		if (zip_header->formated.crc32 != (gunzip_crc ^ 0xffffffffL)) {
 			bb_error_msg("Invalid compressed data--crc error");
+			return 1;
 		}
 		/* Validate decompression - size */
 		if (zip_header->formated.ucmpsize != gunzip_bytes_out) {
 			bb_error_msg("Invalid compressed data--length error");
+			return 1;
 		}
 	}
+	return 0;
 }
 
-extern int unzip_main(int argc, char **argv)
+int unzip_main(int argc, char **argv)
 {
 	zip_header_t zip_header;
 	enum {v_silent, v_normal, v_list} verbosity = v_normal;
@@ -150,7 +140,7 @@ extern int unzip_main(int argc, char **argv)
 	llist_t *zaccept = NULL;
 	llist_t *zreject = NULL;
 	char *base_dir = NULL;
-	int i, opt, opt_range = 0, list_header_done = 0;
+	int failed, i, opt, opt_range = 0, list_header_done = 0;
 	char key_buf[512];
 	struct stat stat_buf;
 
@@ -190,7 +180,7 @@ extern int unzip_main(int argc, char **argv)
 
 		case 1: /* Include files */
 			if (opt == 1) {
-				zaccept = llist_add_to(zaccept, optarg);
+				llist_add_to(&zaccept, optarg);
 
 			} else if (opt == 'd') {
 				base_dir = optarg;
@@ -206,7 +196,7 @@ extern int unzip_main(int argc, char **argv)
 
 		case 2 : /* Exclude files */
 			if (opt == 1) {
-				zreject = llist_add_to(zreject, optarg);
+				llist_add_to(&zreject, optarg);
 
 			} else if (opt == 'd') { /* Extract to base directory */
 				base_dir = optarg;
@@ -233,7 +223,7 @@ extern int unzip_main(int argc, char **argv)
 		overwrite = (overwrite == o_prompt) ? o_never : overwrite;
 
 	} else {
-		char *extn[] = {"", ".zip", ".ZIP"};
+		static const char *const extn[] = {"", ".zip", ".ZIP"};
 		int orig_src_fn_len = strlen(src_fn);
 		for(i = 0; (i < 3) && (src_fd == -1); i++) {
 			strcpy(src_fn + orig_src_fn_len, extn[i]);
@@ -246,12 +236,13 @@ extern int unzip_main(int argc, char **argv)
 	}
 
 	/* Change dir if necessary */
-	if (base_dir && chdir(base_dir)) {
-		bb_perror_msg_and_die("Cannot chdir");
-	}
+	if (base_dir)
+		bb_xchdir(base_dir);
 
 	if (verbosity != v_silent)
 		printf("Archive:  %s\n", src_fn);
+
+	failed = 0;
 
 	while (1) {
 		unsigned int magic;
@@ -266,7 +257,7 @@ extern int unzip_main(int argc, char **argv)
 
 		/* Read the file header */
 		unzip_read(src_fd, zip_header.raw, 26);
-#if (BYTE_ORDER == BIG_ENDIAN)
+#if BB_BIG_ENDIAN
 		zip_header.formated.version = __swap16(zip_header.formated.version);
 		zip_header.formated.flags = __swap16(zip_header.formated.flags);
 		zip_header.formated.method = __swap16(zip_header.formated.method);
@@ -277,23 +268,22 @@ extern int unzip_main(int argc, char **argv)
 		zip_header.formated.ucmpsize = __swap32(zip_header.formated.ucmpsize);
 		zip_header.formated.filename_len = __swap16(zip_header.formated.filename_len);
 		zip_header.formated.extra_len = __swap16(zip_header.formated.extra_len);
-#endif
+#endif /* BB_BIG_ENDIAN */
 		if ((zip_header.formated.method != 0) && (zip_header.formated.method != 8)) {
 			bb_error_msg_and_die("Unsupported compression method %d", zip_header.formated.method);
 		}
 
 		/* Read filename */
 		free(dst_fn);
-		dst_fn = xmalloc(zip_header.formated.filename_len + 1);
+		dst_fn = xzalloc(zip_header.formated.filename_len + 1);
 		unzip_read(src_fd, dst_fn, zip_header.formated.filename_len);
-		dst_fn[zip_header.formated.filename_len] = 0;
 
 		/* Skip extra header bytes */
 		unzip_skip(src_fd, zip_header.formated.extra_len);
 
 		if ((verbosity == v_list) && !list_header_done){
-			printf("  Length     Date   Time    Name\n");
-			printf(" --------    ----   ----    ----\n");
+			printf("  Length     Date   Time    Name\n"
+				   " --------    ----   ----    ----\n");
 			list_header_done = 1;
 		}
 
@@ -331,7 +321,7 @@ extern int unzip_main(int argc, char **argv)
 					}
 					unzip_create_leading_dirs(dst_fn);
 					if (bb_make_directory(dst_fn, 0777, 0)) {
-						bb_error_msg_and_die("Failed to create directory");
+						bb_error_msg_and_die("Exiting");
 					}
 				} else {
 					if (!S_ISDIR(stat_buf.st_mode)) {
@@ -380,7 +370,9 @@ extern int unzip_main(int argc, char **argv)
 			if (verbosity == v_normal) {
 				printf("  inflating: %s\n", dst_fn);
 			}
-			unzip_extract(&zip_header, src_fd, dst_fd);
+			if (unzip_extract(&zip_header, src_fd, dst_fd)) {
+			    failed = 1;
+			}
 			if (dst_fd != STDOUT_FILENO) {
 				/* closing STDOUT is potentially bad for future business */
 				close(dst_fd);
@@ -406,7 +398,7 @@ extern int unzip_main(int argc, char **argv)
 			goto _check_file;
 
 		default:
-			printf("error:  invalid response [%c]\n",(char)i);
+			printf("error: invalid response [%c]\n",(char)i);
 			goto _check_file;
 		}
 
@@ -418,18 +410,9 @@ extern int unzip_main(int argc, char **argv)
 	}
 
 	if (verbosity == v_list) {
-		printf(" --------                   -------\n");
-		printf("%9d                   %d files\n", total_size, total_entries);
+		printf(" --------                   -------\n"
+		       "%9d                   %d files\n", total_size, total_entries);
 	}
 
-	return(EXIT_SUCCESS);
+	return failed;
 }
-
-/* END CODE */
-/*
-Local Variables:
-c-file-style: "linux"
-c-basic-offset: 4
-tab-width: 4
-End:
-*/

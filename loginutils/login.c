@@ -10,7 +10,6 @@
 #include <utmp.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <ctype.h>
 #include <time.h>
@@ -52,14 +51,14 @@ static int login_prompt ( char *buf_name );
 static void motd ( void );
 
 
-static void alarm_handler ( int sig )
+static void alarm_handler ( int sig ATTRIBUTE_UNUSED)
 {
 	fprintf (stderr, "\nLogin timed out after %d seconds.\n", TIMEOUT );
 	exit ( EXIT_SUCCESS );
 }
 
 
-extern int login_main(int argc, char **argv)
+int login_main(int argc, char **argv)
 {
 	char tty[BUFSIZ];
 	char full_tty[200];
@@ -79,7 +78,7 @@ extern int login_main(int argc, char **argv)
 	char *opt_host = 0;
 	int alarmstarted = 0;
 #ifdef CONFIG_SELINUX
-	security_context_t stat_sid = NULL, sid = NULL, old_tty_sid=NULL, new_tty_sid=NULL;
+	security_context_t user_sid = NULL;
 #endif
 
 	username[0]=0;
@@ -101,7 +100,7 @@ extern int login_main(int argc, char **argv)
 			if ( optarg != argv[optind-1] )
 				bb_show_usage( );
 
-			if ( !amroot ) 		/* Auth bypass only if real UID is zero */
+			if ( !amroot )		/* Auth bypass only if real UID is zero */
 				bb_error_msg_and_die ( "-f permission denied" );
 
 			safe_strncpy(username, optarg, USERNAME_SIZE);
@@ -147,7 +146,7 @@ extern int login_main(int argc, char **argv)
 	else
 		snprintf ( fromhost, sizeof( fromhost ) - 1, " on `%.100s'", tty );
 
-	setpgrp();
+	bb_setpgrp;
 
 	openlog ( "login", LOG_PID | LOG_CONS | LOG_NOWAIT, LOG_AUTH );
 
@@ -223,22 +222,19 @@ auth_ok:
 #ifdef CONFIG_SELINUX
 	if (is_selinux_enabled())
 	{
-		struct stat st;
-		int rc;
+		security_context_t old_tty_sid, new_tty_sid;
 
-		if (get_default_context(username, NULL, &sid))
+		if (get_default_context(username, NULL, &user_sid))
 		{
 			fprintf(stderr, "Unable to get SID for %s\n", username);
 			exit(1);
 		}
-		rc = getfilecon(full_tty,&stat_sid);
-		freecon(stat_sid);
-		if ((rc<0) || (stat(full_tty, &st)<0))
+		if (getfilecon(full_tty, &old_tty_sid) < 0)
 		{
-			fprintf(stderr, "stat_secure(%.100s) failed: %.100s\n", full_tty, strerror(errno));
+			fprintf(stderr, "getfilecon(%.100s) failed: %.100s\n", full_tty, strerror(errno));
 			return EXIT_FAILURE;
 		}
-		if (security_compute_relabel (sid, old_tty_sid, SECCLASS_CHR_FILE, &new_tty_sid) != 0)
+		if (security_compute_relabel(user_sid, old_tty_sid, SECCLASS_CHR_FILE, &new_tty_sid) != 0)
 		{
 			fprintf(stderr, "security_change_sid(%.100s) failed: %.100s\n", full_tty, strerror(errno));
 			return EXIT_FAILURE;
@@ -248,9 +244,6 @@ auth_ok:
 			fprintf(stderr, "chsid(%.100s, %s) failed: %.100s\n", full_tty, new_tty_sid, strerror(errno));
 			return EXIT_FAILURE;
 		}
-		freecon(sid);
-		freecon(old_tty_sid);
-		freecon(new_tty_sid);
 	}
 #endif
 	if ( !is_my_tty ( full_tty ))
@@ -273,7 +266,9 @@ auth_ok:
 	if ( pw-> pw_uid == 0 )
 		syslog ( LOG_INFO, "root login %s\n", fromhost );
 #ifdef CONFIG_SELINUX
-	set_current_security_context(sid);
+	/* well, a simple setexeccon() here would do the job as well,
+	 * but let's play the game for now */
+	set_current_security_context(user_sid);
 #endif
 	run_shell ( tmp, 1, 0, 0);	/* exec the shell finally. */
 
@@ -342,7 +337,7 @@ static int check_tty ( const char *tty )
 
 	if (( fp = fopen ( bb_path_securetty_file, "r" ))) {
 		while ( fgets ( buf, sizeof( buf ) - 1, fp )) {
-			for ( i = bb_strlen( buf ) - 1; i >= 0; --i ) {
+			for ( i = strlen( buf ) - 1; i >= 0; --i ) {
 				if ( !isspace ( buf[i] ))
 					break;
 			}
@@ -432,6 +427,8 @@ static void checkutmp(int picky)
 	if (ut) {
 		utent = *ut;
 	} else {
+		time_t t_tmp;
+		
 		if (picky) {
 			puts(NO_UTENT);
 			exit(1);
@@ -450,7 +447,8 @@ static void checkutmp(int picky)
 		/* XXX - assumes /dev/tty?? */
 		strncpy(utent.ut_id, utent.ut_line + 3, sizeof utent.ut_id);
 		strncpy(utent.ut_user, "LOGIN", sizeof utent.ut_user);
-		time(&utent.ut_time);
+		t_tmp = (time_t)utent.ut_time;
+		time(&t_tmp);
 	}
 }
 
@@ -461,20 +459,22 @@ static void checkutmp(int picky)
  *	USER_PROCESS.  the wtmp file will be updated as well.
  */
 
-static void setutmp(const char *name, const char *line)
+static void setutmp(const char *name, const char *line ATTRIBUTE_UNUSED)
 {
+	time_t t_tmp = (time_t)utent.ut_time;
+
 	utent.ut_type = USER_PROCESS;
 	strncpy(utent.ut_user, name, sizeof utent.ut_user);
-	time(&utent.ut_time);
+	time(&t_tmp);
 	/* other fields already filled in by checkutmp above */
 	setutent();
 	pututline(&utent);
 	endutent();
 #ifdef CONFIG_FEATURE_WTMP
-	if (access(_PATH_WTMP, R_OK|W_OK) == -1) {
-		close(creat(_PATH_WTMP, 0664));
+	if (access(bb_path_wtmp_file, R_OK|W_OK) == -1) {
+		close(creat(bb_path_wtmp_file, 0664));
 	}
-	updwtmp(_PATH_WTMP, &utent);
+	updwtmp(bb_path_wtmp_file, &utent);
 #endif
 }
 #endif /* CONFIG_FEATURE_UTMP */

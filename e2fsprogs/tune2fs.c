@@ -39,7 +39,7 @@
 #include "ext2fs/ext2fs.h"
 #include "uuid/uuid.h"
 #include "e2p/e2p.h"
-#include "ext2fs/jfs_user.h"
+#include "ext2fs/kernel-jbd.h"
 #include "util.h"
 #include "blkid/blkid.h"
 
@@ -163,7 +163,7 @@ no_valid_journal:
 
 /* Helper function for remove_journal_inode */
 static int release_blocks_proc(ext2_filsys fs, blk_t *blocknr,
-			       int blockcnt EXT2FS_ATTR((unused)), 
+			       int blockcnt EXT2FS_ATTR((unused)),
 			       void *private EXT2FS_ATTR((unused)))
 {
 	blk_t	block;
@@ -187,9 +187,9 @@ static void remove_journal_inode(ext2_filsys fs)
 	ino_t			ino = fs->super->s_journal_inum;
 	char *msg = "to read";
 	char *s = "journal inode";
-	
+
 	retval = ext2fs_read_inode(fs, ino,  &inode);
-	if (retval) 
+	if (retval)
 		goto REMOVE_JOURNAL_INODE_ERROR;
 	if (ino == EXT2_JOURNAL_INO) {
 		retval = ext2fs_read_bitmaps(fs);
@@ -343,13 +343,13 @@ static void add_journal(ext2_filsys fs)
 	return;
 }
 
-/*  
+/*
  * Busybox stuff
  */
 static char * x_blkid_get_devname(const char *token)
 {
 	char * dev_name;
-	
+
 	if (!(dev_name = blkid_get_devname(NULL, token, NULL)))
 		bb_error_msg_and_die("Unable to resolve '%s'", token);
 	return dev_name;
@@ -368,11 +368,11 @@ static void parse_e2label_options(int argc, char ** argv)
 		open_flag = EXT2_FLAG_RW | EXT2_FLAG_JOURNAL_DEV_OK;
 		L_flag = 1;
 		new_label = argv[2];
-	} else 
+	} else
 		print_label++;
 }
 #else
-#define parse_e2label_options(x,y)         
+#define parse_e2label_options(x,y)
 #endif
 
 static time_t parse_time(char *str)
@@ -516,7 +516,7 @@ MOUNTS_COUNT_ERROR:
 				mntopts_cmd = optarg;
 				open_flag = EXT2_FLAG_RW;
 				break;
-				
+
 			case 'O':
 				if (features_cmd) {
 					bb_error_msg_and_die("-O may only be specified once");
@@ -566,7 +566,7 @@ MOUNTS_COUNT_ERROR:
 }
 
 #ifdef CONFIG_FINDFS
-static attribute_noreturn void do_findfs(int argc, char **argv)
+static ATTRIBUTE_NORETURN void do_findfs(int argc, char **argv)
 {
 	if ((argc != 2) ||
 	    (strncmp(argv[1], "LABEL=", 6) && strncmp(argv[1], "UUID=", 5)))
@@ -579,7 +579,7 @@ static attribute_noreturn void do_findfs(int argc, char **argv)
 #define do_findfs(x, y)
 #endif
 
-static void clean_up(void)
+static void tune2fs_clean_up(void)
 {
 	if (ENABLE_FEATURE_CLEAN_UP && device_name) free(device_name);
 	if (ENABLE_FEATURE_CLEAN_UP && journal_device) free(journal_device);
@@ -593,8 +593,8 @@ int tune2fs_main(int argc, char **argv)
 	io_manager io_ptr;
 
 	if (ENABLE_FEATURE_CLEAN_UP)
-		atexit(clean_up);
-		
+		atexit(tune2fs_clean_up);
+
 	if (ENABLE_FINDFS && (bb_applet_name[0] == 'f')) /* findfs */
 		do_findfs(argc, argv);  /* no return */
 	else if (ENABLE_E2LABEL && (bb_applet_name[0] == 'e')) /* e2label */
@@ -603,7 +603,7 @@ int tune2fs_main(int argc, char **argv)
 		parse_tune2fs_options(argc, argv);  /* tune2fs */
 
 	io_ptr = unix_io_manager;
-	retval = ext2fs_open2(device_name, io_options, open_flag, 
+	retval = ext2fs_open2(device_name, io_options, open_flag,
 			      0, 0, io_ptr, &fs);
 	if (retval)
 		bb_error_msg_and_die("No valid superblock on %s", device_name);
@@ -699,13 +699,13 @@ int tune2fs_main(int argc, char **argv)
 		if (strlen(new_label) > sizeof(sb->s_volume_name))
 			bb_error_msg("Warning: label too long, truncating\n");
 		memset(sb->s_volume_name, 0, sizeof(sb->s_volume_name));
-		strncpy(sb->s_volume_name, new_label,
+		safe_strncpy(sb->s_volume_name, new_label,
 			sizeof(sb->s_volume_name));
 		ext2fs_mark_super_dirty(fs);
 	}
 	if (M_flag) {
 		memset(sb->s_last_mounted, 0, sizeof(sb->s_last_mounted));
-		strncpy(sb->s_last_mounted, new_last_mounted,
+		safe_strncpy(sb->s_last_mounted, new_last_mounted,
 			sizeof(sb->s_last_mounted));
 		ext2fs_mark_super_dirty(fs);
 	}

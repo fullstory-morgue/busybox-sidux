@@ -14,7 +14,7 @@ config CONFIG_FEATURE_SHADOWPASSWDS
 	  publicly readable.
 
 config CONFIG_USE_BB_SHADOW
-	bool #"  Use busybox shadow password functions"
+	bool "  Use busybox shadow password functions"
 	default y
 	depends on CONFIG_USE_BB_PWD_GRP && CONFIG_FEATURE_SHADOWPASSWDS
 	help
@@ -84,19 +84,19 @@ config CONFIG_GETTY
 	  getty lets you log in on a tty, it is normally invoked by init.
 
 config CONFIG_FEATURE_UTMP
-	bool "  Support utmp file"
-	depends on CONFIG_GETTY || CONFIG_LOGIN || CONFIG_SU || CONFIG_WHO 
+	bool "Support utmp file"
+	depends on CONFIG_GETTY || CONFIG_LOGIN || CONFIG_SU || CONFIG_WHO
 	default n
 	help
 	  The file /var/run/utmp is used to track who is currently logged in.
 
 config CONFIG_FEATURE_WTMP
-	bool "  Support wtmp file"
+	bool "Support wtmp file"
 	depends on CONFIG_GETTY || CONFIG_LOGIN || CONFIG_SU || CONFIG_LAST
 	default n
 	select CONFIG_FEATURE_UTMP
 	help
-	  The file /var/run/wtmp is used to track when user's have logged into 
+	  The file /var/run/wtmp is used to track when user's have logged into
 	  and logged out of the system.
 
 config CONFIG_LOGIN
@@ -110,7 +110,7 @@ config CONFIG_LOGIN
 	  work properly.
 
 config CONFIG_FEATURE_SECURETTY
-	bool "  Support for /etc/securetty"
+	bool "Support for /etc/securetty"
 	default y
 	depends on CONFIG_LOGIN
 	help

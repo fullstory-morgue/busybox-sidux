@@ -4,34 +4,22 @@
  *
  * Copyright (C) 1999-2004 by Erik Andersen <andersen@codepoet.org>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include "libbb.h"
-
+#include "busybox.h"
 
 #ifndef DMALLOC
 #ifdef L_xmalloc
-extern void *xmalloc(size_t size)
+void *xmalloc(size_t size)
 {
 	void *ptr = malloc(size);
 	if (ptr == NULL && size != 0)
@@ -41,7 +29,7 @@ extern void *xmalloc(size_t size)
 #endif
 
 #ifdef L_xrealloc
-extern void *xrealloc(void *ptr, size_t size)
+void *xrealloc(void *ptr, size_t size)
 {
 	ptr = realloc(ptr, size);
 	if (ptr == NULL && size != 0)
@@ -50,8 +38,17 @@ extern void *xrealloc(void *ptr, size_t size)
 }
 #endif
 
+#ifdef L_xzalloc
+void *xzalloc(size_t size)
+{
+	void *ptr = xmalloc(size);
+	memset(ptr, 0, size);
+	return ptr;
+}
+#endif
+
 #ifdef L_xcalloc
-extern void *xcalloc(size_t nmemb, size_t size)
+void *xcalloc(size_t nmemb, size_t size)
 {
 	void *ptr = calloc(nmemb, size);
 	if (ptr == NULL && nmemb != 0 && size != 0)
@@ -62,7 +59,8 @@ extern void *xcalloc(size_t nmemb, size_t size)
 #endif /* DMALLOC */
 
 #ifdef L_xstrdup
-extern char * bb_xstrdup (const char *s) {
+char * bb_xstrdup (const char *s)
+{
 	char *t;
 
 	if (s == NULL)
@@ -78,10 +76,11 @@ extern char * bb_xstrdup (const char *s) {
 #endif
 
 #ifdef L_xstrndup
-extern char * bb_xstrndup (const char *s, int n) {
+char * bb_xstrndup (const char *s, int n)
+{
 	char *t;
 
-	if (s == NULL)
+	if (ENABLE_DEBUG && s == NULL)
 		bb_error_msg_and_die("bb_xstrndup bug");
 
 	t = xmalloc(++n);
@@ -101,12 +100,19 @@ FILE *bb_xfopen(const char *path, const char *mode)
 #endif
 
 #ifdef L_xopen
-extern int bb_xopen(const char *pathname, int flags)
+int bb_xopen(const char *pathname, int flags)
+{
+	return bb_xopen3(pathname, flags, 0777);
+}
+#endif
+
+#ifdef L_xopen3
+int bb_xopen3(const char *pathname, int flags, int mode)
 {
 	int ret;
 
-	ret = open(pathname, flags, 0777);
-	if (ret == -1) {
+	ret = open(pathname, flags, mode);
+	if (ret < 0) {
 		bb_perror_msg_and_die("%s", pathname);
 	}
 	return ret;
@@ -114,12 +120,12 @@ extern int bb_xopen(const char *pathname, int flags)
 #endif
 
 #ifdef L_xread
-extern ssize_t bb_xread(int fd, void *buf, size_t count)
+ssize_t bb_xread(int fd, void *buf, size_t count)
 {
 	ssize_t size;
 
 	size = read(fd, buf, count);
-	if (size == -1) {
+	if (size < 0) {
 		bb_perror_msg_and_die(bb_msg_read_error);
 	}
 	return(size);
@@ -127,7 +133,7 @@ extern ssize_t bb_xread(int fd, void *buf, size_t count)
 #endif
 
 #ifdef L_xread_all
-extern void bb_xread_all(int fd, void *buf, size_t count)
+void bb_xread_all(int fd, void *buf, size_t count)
 {
 	ssize_t size;
 
@@ -143,7 +149,7 @@ extern void bb_xread_all(int fd, void *buf, size_t count)
 #endif
 
 #ifdef L_xread_char
-extern unsigned char bb_xread_char(int fd)
+unsigned char bb_xread_char(int fd)
 {
 	char tmp;
 
@@ -154,7 +160,7 @@ extern unsigned char bb_xread_char(int fd)
 #endif
 
 #ifdef L_xferror
-extern void bb_xferror(FILE *fp, const char *fn)
+void bb_xferror(FILE *fp, const char *fn)
 {
 	if (ferror(fp)) {
 		bb_error_msg_and_die("%s", fn);
@@ -163,14 +169,14 @@ extern void bb_xferror(FILE *fp, const char *fn)
 #endif
 
 #ifdef L_xferror_stdout
-extern void bb_xferror_stdout(void)
+void bb_xferror_stdout(void)
 {
 	bb_xferror(stdout, bb_msg_standard_output);
 }
 #endif
 
 #ifdef L_xfflush_stdout
-extern void bb_xfflush_stdout(void)
+void bb_xfflush_stdout(void)
 {
 	if (fflush(stdout)) {
 		bb_perror_msg_and_die(bb_msg_standard_output);
@@ -178,20 +184,61 @@ extern void bb_xfflush_stdout(void)
 }
 #endif
 
-#ifdef L_strlen
-/* Stupid gcc always includes its own builtin strlen()... */
-#undef strlen
-size_t bb_strlen(const char *string)
+#ifdef L_spawn
+// This does a fork/exec in one call, using vfork().
+pid_t bb_spawn(char **argv)
 {
-	    return(strlen(string));
+	static int failed;
+	pid_t pid;
+	void *app = find_applet_by_name(argv[0]);
+
+	// Be nice to nommu machines.
+	failed = 0;
+	pid = vfork();
+	if (pid < 0) return pid;
+	if (!pid) {
+		execvp(app ? CONFIG_BUSYBOX_EXEC_PATH : *argv, argv);
+
+		// We're sharing a stack with blocked parent, let parent know we failed
+		// and then exit to unblock parent (but don't run atexit() stuff, which
+		// would screw up parent.)
+
+		failed = -1;
+		_exit(0);
+	}
+	return failed ? failed : pid;
 }
 #endif
 
-/* END CODE */
-/*
-Local Variables:
-c-file-style: "linux"
-c-basic-offset: 4
-tab-width: 4
-End:
-*/
+#ifdef L_xspawn
+pid_t bb_xspawn(char **argv)
+{
+	pid_t pid = bb_spawn(argv);
+	if (pid < 0) bb_perror_msg_and_die("%s", *argv);
+	return pid;
+}
+#endif
+
+#ifdef L_wait4
+int wait4pid(int pid)
+{
+	int status;
+
+	if (pid == -1 || waitpid(pid, &status, 0) == -1) return -1;
+	if (WIFEXITED(status)) return WEXITSTATUS(status);
+	if (WIFSIGNALED(status)) return WTERMSIG(status);
+	return 0;
+}
+#endif	
+
+#ifdef L_setuid
+void xsetgid(gid_t gid)
+{
+	if (setgid(gid)) bb_error_msg_and_die("setgid");
+}
+
+void xsetuid(uid_t uid)
+{
+	if (setuid(uid)) bb_error_msg_and_die("setuid");
+}
+#endif

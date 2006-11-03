@@ -36,7 +36,7 @@ static int send_packet_to_relay(struct dhcpMessage *payload)
 {
 	DEBUG(LOG_INFO, "Forwarding packet to relay");
 
-	return kernel_packet(payload, server_config.server, SERVER_PORT,
+	return udhcp_kernel_packet(payload, server_config.server, SERVER_PORT,
 			payload->giaddr, SERVER_PORT);
 }
 
@@ -64,7 +64,7 @@ static int send_packet_to_client(struct dhcpMessage *payload, int force_broadcas
 		ciaddr = payload->yiaddr;
 		chaddr = payload->chaddr;
 	}
-	return raw_packet(payload, server_config.server, SERVER_PORT,
+	return udhcp_raw_packet(payload, server_config.server, SERVER_PORT,
 			ciaddr, CLIENT_PORT, chaddr, server_config.ifindex);
 }
 
@@ -83,7 +83,7 @@ static int send_packet(struct dhcpMessage *payload, int force_broadcast)
 
 static void init_packet(struct dhcpMessage *packet, struct dhcpMessage *oldpacket, char type)
 {
-	init_header(packet, type);
+	udhcp_init_header(packet, type);
 	packet->xid = oldpacket->xid;
 	memcpy(packet->chaddr, oldpacket->chaddr, 16);
 	packet->flags = oldpacket->flags;
@@ -98,9 +98,9 @@ static void add_bootp_options(struct dhcpMessage *packet)
 {
 	packet->siaddr = server_config.siaddr;
 	if (server_config.sname)
-		strncpy(packet->sname, server_config.sname, sizeof(packet->sname) - 1);
+		strncpy((char*)packet->sname, server_config.sname, sizeof(packet->sname) - 1);
 	if (server_config.boot_file)
-		strncpy(packet->file, server_config.boot_file, sizeof(packet->file) - 1);
+		strncpy((char*)packet->file, server_config.boot_file, sizeof(packet->file) - 1);
 }
 
 
@@ -138,11 +138,11 @@ int sendOffer(struct dhcpMessage *oldpacket)
 		   /* and the ip is in the lease range */
 		   ntohl(req_align) >= ntohl(server_config.start) &&
 		   ntohl(req_align) <= ntohl(server_config.end) &&
-		
+
 			!static_lease_ip &&  /* Check that its not a static lease */
 			/* and is not already taken/offered */
 		   ((!(lease = find_lease_by_yiaddr(req_align)) ||
-		
+
 		   /* or its taken, but expired */ /* ADDME: or maybe in here */
 		   lease_expired(lease)))) {
 				packet.yiaddr = req_align; /* FIXME: oh my, is there a host using this IP? */

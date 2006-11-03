@@ -27,7 +27,6 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/signal.h>
 #include <sys/stat.h>
 #include <limits.h>
 #include <stdio.h>
@@ -39,7 +38,6 @@
 #include <paths.h>
 #include <unistd.h>
 #include <errno.h>
-#include <malloc.h>
 #include <signal.h>
 
 #include "fsck.h"
@@ -104,10 +102,10 @@ struct fsck_instance {
  * assure that we only fsck one partition on a particular drive at any
  * one time.  Otherwise, the disk heads will be seeking all over the
  * place.  If the base device can not be determined, return NULL.
- * 
+ *
  * The base_device() function returns an allocated string which must
  * be freed.
- * 
+ *
  */
 
 
@@ -1177,14 +1175,6 @@ static int check_all(void)
 	return status;
 }
 
-#if 0
-static void usage(void)
-{
-	fputs("Usage: fsck [-ANPRTV] [ -C [ fd ] ] [-t fstype] [fs-options] [filesys ...]\n", stderr);
-	exit(EXIT_USAGE);
-}
-#endif
-
 static void signal_cancel(int sig FSCK_ATTR((unused)))
 {
 	cancel_requested++;
@@ -1302,13 +1292,13 @@ static void PRS(int argc, char *argv[])
 			case 't':
 				tmp = 0;
 				if (fstype)
-					usage();
+					bb_show_usage();
 				if (arg[j+1])
 					tmp = arg+j+1;
 				else if ((i+1) < argc)
 					tmp = argv[++i];
 				else
-					usage();
+					bb_show_usage();
 				fstype = string_copy(tmp);
 				compile_fs_type(fstype, &fs_type_compiled);
 				goto next_arg;
@@ -1316,7 +1306,7 @@ static void PRS(int argc, char *argv[])
 				opts_for_fsck++;
 				break;
 			case '?':
-				usage();
+				bb_show_usage();
 				break;
 			default:
 				options[++opt] = arg[j];

@@ -1,7 +1,7 @@
 /*
  * flushb.c --- Hides system-dependent information for both syncing a
- * 	device to disk and to flush any buffers from disk cache.
- * 
+ *	device to disk and to flush any buffers from disk cache.
+ *
  * Copyright (C) 2000 Theodore Ts'o.
  *
  * %Begin-Header%
@@ -29,7 +29,7 @@
 #include "ext2fs.h"
 
 /*
- * For Linux, define BLKFLSBUF and FDFLUSH if necessary, since 
+ * For Linux, define BLKFLSBUF and FDFLUSH if necessary, since
  * not all portable header file does so for us.  This really should be
  * fixed in the glibc header files.  (Recent glibcs appear to define
  * BLKFLSBUF in sys/mount.h, but FDFLUSH still doesn't seem to be
@@ -67,14 +67,14 @@ errcode_t ext2fs_sync_device(int fd, int flushb)
 			return 0;
 #else
 #ifdef __GNUC__
- #warning BLKFLSBUF not defined
+# warning BLKFLSBUF not defined
 #endif /* __GNUC__ */
 #endif
 #ifdef FDFLUSH
 		ioctl (fd, FDFLUSH, 0);   /* In case this is a floppy */
 #else
 #ifdef __GNUC__
- #warning FDFLUSH not defined
+# warning FDFLUSH not defined
 #endif /* __GNUC__ */
 #endif
 	}

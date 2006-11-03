@@ -15,9 +15,8 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/file.h>
-#include <sys/time.h>
 #include <sys/times.h>
-#include <sys/signal.h>
+#include <signal.h>
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -33,13 +32,15 @@
 #include "busybox.h"
 
 
-static const int DEFDATALEN = 56;
-static const int MAXIPLEN = 60;
-static const int MAXICMPLEN = 76;
-static const int MAXPACKET = 65468;
-#define	MAX_DUP_CHK	(8 * 128)
-static const int MAXWAIT = 10;
-static const int PINGINTERVAL = 1;		/* second */
+enum {
+	DEFDATALEN = 56,
+	MAXIPLEN = 60,
+	MAXICMPLEN = 76,
+	MAXPACKET = 65468,
+	MAX_DUP_CHK = (8 * 128),
+	MAXWAIT = 10,
+	PINGINTERVAL = 1		/* second */
+};
 
 #define O_QUIET         (1 << 0)
 
@@ -106,11 +107,13 @@ static void ping(const char *host)
 	pkt->icmp_type = ICMP_ECHO;
 	pkt->icmp_cksum = in_cksum((unsigned short *) pkt, sizeof(packet));
 
-	c = sendto(pingsock, packet, sizeof(packet), 0,
+	c = sendto(pingsock, packet, DEFDATALEN + ICMP_MINLEN, 0,
 			   (struct sockaddr *) &pingaddr, sizeof(struct sockaddr_in));
 
-	if (c < 0 || c != sizeof(packet))
+	if (c < 0) {
+		if (ENABLE_FEATURE_CLEAN_UP) close(pingsock);
 		bb_perror_msg_and_die("sendto");
+	}
 
 	signal(SIGALRM, noresp);
 	alarm(5);					/* give the host 5000ms to respond */
@@ -134,11 +137,12 @@ static void ping(const char *host)
 				break;
 		}
 	}
+	if (ENABLE_FEATURE_CLEAN_UP) close(pingsock);
 	printf("%s is alive!\n", hostname);
 	return;
 }
 
-extern int ping_main(int argc, char **argv)
+int ping_main(int argc, char **argv)
 {
 	argc--;
 	argv++;
@@ -200,7 +204,7 @@ static void sendping(int junk)
 {
 	struct icmp *pkt;
 	int i;
-	char packet[datalen + sizeof(struct icmp)];
+	char packet[datalen + ICMP_MINLEN];
 
 	pkt = (struct icmp *) packet;
 
@@ -236,20 +240,20 @@ static void sendping(int junk)
 static char *icmp_type_name (int id)
 {
 	switch (id) {
-	case ICMP_ECHOREPLY: 		return "Echo Reply";
-	case ICMP_DEST_UNREACH: 	return "Destination Unreachable";
-	case ICMP_SOURCE_QUENCH: 	return "Source Quench";
-	case ICMP_REDIRECT: 		return "Redirect (change route)";
-	case ICMP_ECHO: 			return "Echo Request";
-	case ICMP_TIME_EXCEEDED: 	return "Time Exceeded";
-	case ICMP_PARAMETERPROB: 	return "Parameter Problem";
-	case ICMP_TIMESTAMP: 		return "Timestamp Request";
-	case ICMP_TIMESTAMPREPLY: 	return "Timestamp Reply";
-	case ICMP_INFO_REQUEST: 	return "Information Request";
-	case ICMP_INFO_REPLY: 		return "Information Reply";
-	case ICMP_ADDRESS: 			return "Address Mask Request";
-	case ICMP_ADDRESSREPLY: 	return "Address Mask Reply";
-	default: 					return "unknown ICMP type";
+	case ICMP_ECHOREPLY:		return "Echo Reply";
+	case ICMP_DEST_UNREACH:		return "Destination Unreachable";
+	case ICMP_SOURCE_QUENCH:	return "Source Quench";
+	case ICMP_REDIRECT:			return "Redirect (change route)";
+	case ICMP_ECHO:				return "Echo Request";
+	case ICMP_TIME_EXCEEDED:	return "Time Exceeded";
+	case ICMP_PARAMETERPROB:	return "Parameter Problem";
+	case ICMP_TIMESTAMP:		return "Timestamp Request";
+	case ICMP_TIMESTAMPREPLY:	return "Timestamp Reply";
+	case ICMP_INFO_REQUEST:		return "Information Request";
+	case ICMP_INFO_REPLY:		return "Information Reply";
+	case ICMP_ADDRESS:			return "Address Mask Request";
+	case ICMP_ADDRESSREPLY:		return "Address Mask Reply";
+	default:					return "unknown ICMP type";
 	}
 }
 
@@ -377,7 +381,7 @@ static void ping(const char *host)
 	pingstats(0);
 }
 
-extern int ping_main(int argc, char **argv)
+int ping_main(int argc, char **argv)
 {
 	char *thisarg;
 

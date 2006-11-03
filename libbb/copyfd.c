@@ -12,7 +12,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "busybox.h"
 #include "libbb.h"
 
 
@@ -32,7 +31,7 @@ static ssize_t bb_full_fd_action(int src_fd, int dst_fd, size_t size)
 	while (!size || total < size)
 	{
 		ssize_t wrote, xread;
-		
+
 		xread = safe_read(src_fd, buffer,
 				(!size || size - total > BUFSIZ) ? BUFSIZ : size - total);
 
@@ -44,6 +43,7 @@ static ssize_t bb_full_fd_action(int src_fd, int dst_fd, size_t size)
 				break;
 			}
 			total += wrote;
+			if (total == size) status = 0;
 		} else if (xread < 0) {
 			bb_perror_msg(bb_msg_read_error);
 			break;
@@ -53,15 +53,15 @@ static ssize_t bb_full_fd_action(int src_fd, int dst_fd, size_t size)
 			break;
 		}
 	}
-		
+
 out:
 	RELEASE_CONFIG_BUFFER(buffer);
 
-	return status ? status : total;
+	return status ? status : (ssize_t)total;
 }
 
 
-extern int bb_copyfd_size(int fd1, int fd2, const off_t size)
+int bb_copyfd_size(int fd1, int fd2, const off_t size)
 {
 	if (size) {
 		return(bb_full_fd_action(fd1, fd2, size));
@@ -69,7 +69,7 @@ extern int bb_copyfd_size(int fd1, int fd2, const off_t size)
 	return(0);
 }
 
-extern int bb_copyfd_eof(int fd1, int fd2)
+int bb_copyfd_eof(int fd1, int fd2)
 {
 	return(bb_full_fd_action(fd1, fd2, 0));
 }

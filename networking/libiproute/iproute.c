@@ -1,3 +1,4 @@
+/* vi: set sw=4 ts=4: */
 /*
  * iproute.c		"ip route".
  *
@@ -12,17 +13,17 @@
  * Kunihiro Ishiguro <kunihiro@zebra.org> 001102: rtnh_ifindex was not initialized
  */
 
+#include "libbb.h"
+
 #include <sys/socket.h>
 
-#include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
 
 #include "rt_names.h"
 #include "utils.h"
-
-#include "libbb.h"
+#include "ip_common.h"
 
 #ifndef RTAX_RTTVAR
 #define RTAX_RTTVAR RTAX_HOPS
@@ -62,7 +63,8 @@ static int flush_update(void)
 	return 0;
 }
 
-static int print_route(struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
+static int print_route(struct sockaddr_nl *who ATTRIBUTE_UNUSED,
+		struct nlmsghdr *n, void *arg)
 {
 	FILE *fp = (FILE*)arg;
 	struct rtmsg *r = NLMSG_DATA(n);
@@ -284,9 +286,9 @@ static int iproute_modify(int cmd, unsigned flags, int argc, char **argv)
 {
 	struct rtnl_handle rth;
 	struct {
-		struct nlmsghdr 	n;
-		struct rtmsg 		r;
-		char   			buf[1024];
+		struct nlmsghdr		n;
+		struct rtmsg		r;
+		char			buf[1024];
 	} req;
 	char  mxbuf[256];
 	struct rtattr * mxrta = (void*)mxbuf;
@@ -341,14 +343,14 @@ static int iproute_modify(int cmd, unsigned flags, int argc, char **argv)
 				NEXT_ARG();
 			}
 			if (get_unsigned(&mtu, *argv, 0)) {
-				invarg("\"mtu\" value is invalid\n", *argv);
+				invarg(*argv, "mtu");
 			}
 			rta_addattr32(mxrta, sizeof(mxbuf), RTAX_MTU, mtu);
 		} else if (matches(*argv, "protocol") == 0) {
-			int prot;
+			uint32_t prot;
 			NEXT_ARG();
 			if (rtnl_rtprot_a2n(&prot, *argv))
-				invarg("\"protocol\" value is invalid\n", *argv);
+				invarg(*argv, "protocol");
 			req.r.rtm_protocol = prot;
 			proto_ok =1;
 		} else if (strcmp(*argv, "dev") == 0 ||
@@ -485,18 +487,18 @@ static int iproute_list_or_flush(int argc, char **argv, int flush)
 	filter.tb = RT_TABLE_MAIN;
 
 	if (flush && argc <= 0) {
-		fprintf(stderr, "\"ip route flush\" requires arguments.\n");
+		bb_error_msg(bb_msg_requires_arg, "\"ip route flush\"");
 		return -1;
 	}
 
 	while (argc > 0) {
 		if (matches(*argv, "protocol") == 0) {
-			int prot = 0;
+			uint32_t prot = 0;
 			NEXT_ARG();
 			filter.protocolmask = -1;
 			if (rtnl_rtprot_a2n(&prot, *argv)) {
 				if (strcmp(*argv, "all") != 0) {
-					invarg("invalid \"protocol\"\n", *argv);
+					invarg(*argv, "protocol");
 				}
 				prot = 0;
 				filter.protocolmask = 0;
@@ -539,7 +541,7 @@ static int iproute_list_or_flush(int argc, char **argv, int flush)
 				if (matches(*argv, "cache") == 0) {
 					filter.tb = -1;
 				} else if (matches(*argv, "main") != 0) {
-					invarg("invalid \"table\"", *argv);
+					invarg(*argv, "table");
 				}
 			} else if (matches(*argv, "cache") == 0) {
 				filter.tb = -1;
@@ -585,7 +587,6 @@ static int iproute_list_or_flush(int argc, char **argv, int flush)
 	}
 
 	if (flush) {
-		int _round = 0;
 		char flushb[4096-512];
 
 		if (filter.tb == -1) {
@@ -611,14 +612,9 @@ static int iproute_list_or_flush(int argc, char **argv, int flush)
 				return -1;
 			}
 			if (filter.flushed == 0) {
-				if (_round == 0) {
-					if (filter.tb != -1 || do_ipv6 == AF_INET6)
-						fprintf(stderr, "Nothing to flush.\n");
-				}
 				fflush(stdout);
 				return 0;
 			}
-			_round++;
 			if (flush_update() < 0)
 				exit(1);
 		}
@@ -646,15 +642,15 @@ static int iproute_get(int argc, char **argv)
 {
 	struct rtnl_handle rth;
 	struct {
-		struct nlmsghdr 	n;
-		struct rtmsg 		r;
-		char   			buf[1024];
+		struct nlmsghdr		n;
+		struct rtmsg		r;
+		char			buf[1024];
 	} req;
 	char  *idev = NULL;
 	char  *odev = NULL;
 	int connected = 0;
 	int from_ok = 0;
-	static const char * const options[] = 
+	static const char * const options[] =
 		{ "from", "iif", "oif", "dev", "notify", "connected", "to", 0 };
 
 	memset(&req, 0, sizeof(req));
@@ -814,8 +810,8 @@ static int iproute_get(int argc, char **argv)
 
 int do_iproute(int argc, char **argv)
 {
-	static const char * const ip_route_commands[] = 
-		{ "add", "append", "change", "chg", "delete", "del", "get", 
+	static const char * const ip_route_commands[] =
+		{ "add", "append", "change", "chg", "delete", "del", "get",
 		"list", "show", "prepend", "replace", "test", "flush", 0 };
 	int command_num = 7;
 	unsigned int flags = 0;

@@ -1,7 +1,7 @@
 /*
  * bitops.c --- Bitmap frobbing code.  See bitops.h for the inlined
- * 	routines.
- * 
+ *	routines.
+ *
  * Copyright (C) 1993, 1994, 1995, 1996 Theodore Ts'o.
  *
  * %Begin-Header%
@@ -30,7 +30,7 @@
  * systems, as well as non-32 bit systems.
  */
 
-int ext2fs_set_bit(int nr,void * addr)
+int ext2fs_set_bit(unsigned int nr,void * addr)
 {
 	int		mask, retval;
 	unsigned char	*ADDR = (unsigned char *) addr;
@@ -42,7 +42,7 @@ int ext2fs_set_bit(int nr,void * addr)
 	return retval;
 }
 
-int ext2fs_clear_bit(int nr, void * addr)
+int ext2fs_clear_bit(unsigned int nr, void * addr)
 {
 	int		mask, retval;
 	unsigned char	*ADDR = (unsigned char *) addr;
@@ -54,7 +54,7 @@ int ext2fs_clear_bit(int nr, void * addr)
 	return retval;
 }
 
-int ext2fs_test_bit(int nr, const void * addr)
+int ext2fs_test_bit(unsigned int nr, const void * addr)
 {
 	int			mask;
 	const unsigned char	*ADDR = (const unsigned char *) addr;
@@ -71,9 +71,9 @@ void ext2fs_warn_bitmap(errcode_t errcode, unsigned long arg,
 {
 #ifndef OMIT_COM_ERR
 	if (description)
-		com_err(0, errcode, "#%lu for %s", arg, description);
+		bb_error_msg("#%lu for %s", arg, description);
 	else
-		com_err(0, errcode, "#%lu", arg);
+		bb_error_msg("#%lu", arg);
 #endif
 }
 
@@ -82,10 +82,9 @@ void ext2fs_warn_bitmap2(ext2fs_generic_bitmap bitmap,
 {
 #ifndef OMIT_COM_ERR
 	if (bitmap->description)
-		com_err(0, bitmap->base_error_code+code,
-			"#%lu for %s", arg, bitmap->description);
+		bb_error_msg("#%lu for %s", arg, bitmap->description);
 	else
-		com_err(0, bitmap->base_error_code + code, "#%lu", arg);
+		bb_error_msg("#%lu", arg);
 #endif
 }
 

@@ -67,7 +67,7 @@ int readprofile_main(int argc, char **argv)
 	int proFd;
 	const char *mapFile, *proFile, *mult=0;
 	unsigned long len=0, indx=1;
-	unsigned long long add0=0;
+	uint64_t add0=0;
 	unsigned int step;
 	unsigned int *buf, total, fn_len;
 	unsigned long long fn_add, next_add;          /* current and next address */
@@ -149,9 +149,9 @@ int readprofile_main(int argc, char **argv)
 	/*
 	 * Use an fd for the profiling buffer, to skip stdio overhead
 	 */
-	 
+
 	proFd = bb_xopen(proFile,O_RDONLY);
-	
+
 	if (((int)(len=lseek(proFd,0,SEEK_END)) < 0)
 	    || (lseek(proFd,0,SEEK_SET) < 0))
 		bb_perror_msg_and_die(proFile);
@@ -243,7 +243,7 @@ int readprofile_main(int argc, char **argv)
 					printf ("%s:\n", fn_name);
 					header_printed = 1;
 				}
-				printf ("\t%llx\t%u\n", (indx - 1)*step + add0, buf[indx]);
+				printf ("\t%"PRIx64"\t%u\n", (indx - 1)*step + add0, buf[indx]);
 			}
 			this += buf[indx++];
 		}
