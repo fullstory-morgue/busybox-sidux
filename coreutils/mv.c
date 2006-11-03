@@ -35,18 +35,20 @@
 #include "busybox.h"
 #include "libcoreutils/coreutils.h"
 
+#if ENABLE_FEATURE_MV_LONG_OPTIONS
 static const struct option mv_long_options[] = {
 	{ "interactive", 0, NULL, 'i' },
 	{ "force", 0, NULL, 'f' },
 	{ 0, 0, 0, 0 }
 };
+#endif
 
 #define OPT_FILEUTILS_FORCE       1
 #define OPT_FILEUTILS_INTERACTIVE 2
 
 static const char fmt[] = "cannot overwrite %sdirectory with %sdirectory";
 
-extern int mv_main(int argc, char **argv)
+int mv_main(int argc, char **argv)
 {
 	struct stat dest_stat;
 	const char *last;
@@ -55,7 +57,9 @@ extern int mv_main(int argc, char **argv)
 	int dest_exists;
 	int status = 0;
 
+#if ENABLE_FEATURE_MV_LONG_OPTIONS
 	bb_applet_long_options = mv_long_options;
+#endif
 	bb_opt_complementally = "f-i:i-f";
 	flags = bb_getopt_ulflags(argc, argv, "fi");
 	if (optind + 2 > argc) {

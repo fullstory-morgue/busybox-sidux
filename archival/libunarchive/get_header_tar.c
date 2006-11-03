@@ -1,17 +1,4 @@
-/*
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU Library General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+/* Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  *
  *  FIXME:
  *    In privileged mode if uname and gname map to a uid and gid then use the
@@ -20,7 +7,7 @@
  *  References:
  *    GNU tar and star man pages,
  *    Opengroup's ustar interchange format,
- *      	http://www.opengroup.org/onlinepubs/007904975/utilities/pax.html
+ *	http://www.opengroup.org/onlinepubs/007904975/utilities/pax.html
  */
 
 #include <stdio.h>
@@ -35,7 +22,7 @@ static char *longname = NULL;
 static char *linkname = NULL;
 #endif
 
-extern char get_header_tar(archive_handle_t *archive_handle)
+char get_header_tar(archive_handle_t *archive_handle)
 {
 	file_header_t *file_header = archive_handle->file_header;
 	union {
@@ -70,7 +57,8 @@ extern char get_header_tar(archive_handle_t *archive_handle)
 
 	if (bb_full_read(archive_handle->src_fd, tar.raw, 512) != 512) {
 		/* Assume end of file */
-		return(EXIT_FAILURE);
+		bb_error_msg_and_die("Short header");
+		//return(EXIT_FAILURE);
 	}
 	archive_handle->offset += 512;
 
@@ -92,7 +80,7 @@ extern char get_header_tar(archive_handle_t *archive_handle)
 	 * 0's are for the old tar format
 	 */
 	if (strncmp(tar.formated.magic, "ustar", 5) != 0) {
-#ifdef CONFIG_FEATURE_TAR_OLDGNU_COMPATABILITY
+#ifdef CONFIG_FEATURE_TAR_OLDGNU_COMPATIBILITY
 		if (strncmp(tar.formated.magic, "\0\0\0\0\0", 5) != 0)
 #endif
 			bb_error_msg_and_die("Invalid tar magic");
@@ -120,10 +108,14 @@ extern char get_header_tar(archive_handle_t *archive_handle)
 		linkname = NULL;
 	} else
 #endif
-	if (tar.formated.prefix[0] == 0) {
-		file_header->name = strdup(tar.formated.name);
-	} else {
-		file_header->name = concat_path_file(tar.formated.prefix, tar.formated.name);
+	{
+		file_header->name = bb_xstrndup(tar.formated.name,100);
+
+		if (tar.formated.prefix[0]) {
+			char *temp = file_header->name;
+			file_header->name = concat_path_file(tar.formated.prefix, temp);
+			free(temp);
+		}
 	}
 
 	file_header->uid = strtol(tar.formated.uid, NULL, 8);
@@ -144,15 +136,11 @@ extern char get_header_tar(archive_handle_t *archive_handle)
 	case '1':
 		file_header->mode |= S_IFREG;
 		break;
-	case 'x':
-	case 'g':
-		bb_error_msg_and_die("pax is not tar");
-		break;
 	case '7':
 		/* Reserved for high performance files, treat as normal file */
 	case 0:
 	case '0':
-#ifdef CONFIG_FEATURE_TAR_OLDGNU_COMPATABILITY
+#ifdef CONFIG_FEATURE_TAR_OLDGNU_COMPATIBILITY
 		if (last_char_is(file_header->name, '/')) {
 			file_header->mode |= S_IFDIR;
 		} else
@@ -176,17 +164,15 @@ extern char get_header_tar(archive_handle_t *archive_handle)
 		break;
 #ifdef CONFIG_FEATURE_TAR_GNU_EXTENSIONS
 	case 'L': {
-			longname = xmalloc(file_header->size + 1);
+			longname = xzalloc(file_header->size + 1);
 			archive_xread_all(archive_handle, longname, file_header->size);
-			longname[file_header->size] = '\0';
 			archive_handle->offset += file_header->size;
 
 			return(get_header_tar(archive_handle));
 		}
 	case 'K': {
-			linkname = xmalloc(file_header->size + 1);
+			linkname = xzalloc(file_header->size + 1);
 			archive_xread_all(archive_handle, linkname, file_header->size);
-			linkname[file_header->size] = '\0';
 			archive_handle->offset += file_header->size;
 
 			file_header->name = linkname;
@@ -197,8 +183,11 @@ extern char get_header_tar(archive_handle_t *archive_handle)
 	case 'N':	/* Old GNU for names > 100 characters */
 	case 'S':	/* Sparse file */
 	case 'V':	/* Volume header */
-		bb_error_msg("Ignoring GNU extension type %c", tar.formated.typeflag);
 #endif
+	case 'g':	/* pax global header */
+	case 'x':	/* pax extended header */
+		bb_error_msg("Ignoring extension type %c", tar.formated.typeflag);
+		break;
 	default:
 		bb_error_msg("Unknown typeflag: 0x%x", tar.formated.typeflag);
 	}
@@ -214,7 +203,7 @@ extern char get_header_tar(archive_handle_t *archive_handle)
 		archive_handle->action_header(archive_handle->file_header);
 		archive_handle->flags |= ARCHIVE_EXTRACT_QUIET;
 		archive_handle->action_data(archive_handle);
-		archive_handle->passed = llist_add_to(archive_handle->passed, file_header->name);
+		llist_add_to(&(archive_handle->passed), file_header->name);
 	} else {
 		data_skip(archive_handle);
 	}

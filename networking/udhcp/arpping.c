@@ -5,7 +5,6 @@
  * by Yoichi Hariguchi <yoichi@fore.com>
  */
 
-#include <sys/time.h>
 #include <time.h>
 #include <sys/socket.h>
 #include <netinet/if_ether.h>
@@ -23,7 +22,7 @@
  *		ip - our ip
  *		mac - our arp address
  *		interface - interface to use
- * retn: 	1 addr free
+ * retn:	1 addr free
  *		0 addr used
  *		-1 error
  */
@@ -33,7 +32,7 @@ int arpping(uint32_t yiaddr, uint32_t ip, uint8_t *mac, char *interface)
 {
 
 	int	timeout = 2;
-	int 	optval = 1;
+	int	optval = 1;
 	int	s;			/* socket */
 	int	rv = 1;			/* return value */
 	struct sockaddr addr;		/* for interface name */
@@ -90,7 +89,7 @@ int arpping(uint32_t yiaddr, uint32_t ip, uint8_t *mac, char *interface)
 		} else if (FD_ISSET(s, &fdset)) {
 			if (recv(s, &arp, sizeof(arp), 0) < 0 ) rv = 0;
 			if (arp.operation == htons(ARPOP_REPLY) &&
-			    bcmp(arp.tHaddr, mac, 6) == 0 &&
+			    memcmp(arp.tHaddr, mac, 6) == 0 &&
 			    *((uint32_t *) arp.sInaddr) == yiaddr) {
 				DEBUG(LOG_INFO, "Valid arp reply receved for this address");
 				rv = 0;
@@ -101,6 +100,6 @@ int arpping(uint32_t yiaddr, uint32_t ip, uint8_t *mac, char *interface)
 		prevTime = uptime();
 	}
 	close(s);
-	DEBUG(LOG_INFO, "%salid arp replies for this address", rv ? "No v" : "V");	
+	DEBUG(LOG_INFO, "%salid arp replies for this address", rv ? "No v" : "V");
 	return rv;
 }

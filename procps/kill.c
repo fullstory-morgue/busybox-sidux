@@ -5,23 +5,10 @@
  * Copyright (C) 1995, 1996 by Bruce Perens <bruce@pixar.com>.
  * Copyright (C) 1999-2004 by Erik Andersen <andersen@codepoet.org>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
+ * Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  */
 
-
+#include "busybox.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -30,12 +17,11 @@
 #include <ctype.h>
 #include <string.h>
 #include <unistd.h>
-#include "busybox.h"
 
 #define KILL 0
 #define KILLALL 1
 
-extern int kill_main(int argc, char **argv)
+int kill_main(int argc, char **argv)
 {
 	int whichApp, signo = SIGTERM;
 	const char *name;
@@ -87,9 +73,9 @@ extern int kill_main(int argc, char **argv)
 		return EXIT_SUCCESS;
 	}
 
-#ifdef CONFIG_KILLALL	
+#ifdef CONFIG_KILLALL
 	/* The -q quiet option */
-	if(argv[1][1]=='q' && argv[1][2]=='\0'){
+	if(whichApp != KILL && argv[1][1]=='q' && argv[1][2]=='\0'){
 		quiet++;
 		argv++;
 		argc--;
@@ -105,6 +91,10 @@ extern int kill_main(int argc, char **argv)
 	argc-=2;
 
 do_it_now:
+
+	/* Pid or name required */
+	if (argc <= 0)
+		bb_show_usage();
 
 	if (whichApp == KILL) {
 		/* Looks like they want to do a kill. Do that */

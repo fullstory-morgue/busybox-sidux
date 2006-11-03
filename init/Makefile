@@ -4,11 +4,15 @@
 #
 # Licensed under the GPL v2, see the file LICENSE in this tarball.
 
+ifndef top_srcdir
 top_srcdir=..
+endif
+ifndef top_builddir
 top_builddir=..
+endif
 srcdir=$(top_srcdir)/init
 INIT_DIR:=./
-include $(top_builddir)/Rules.mak
+include $(top_srcdir)/Rules.mak
 include $(top_builddir)/.config
 include $(srcdir)/Makefile.in
 all: $(libraries-y)

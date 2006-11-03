@@ -13,27 +13,10 @@
  * files as well as stdin/stdout, and to generally behave itself wrt
  * command line handling.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-/* These defines are very important for BusyBox.  Without these,
- * huge chunks of ram are pre-allocated making the BusyBox bss
- * size Freaking Huge(tm), which is a bad thing.*/
 #define SMALL_MEM
-#define DYN_ALLOC
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -100,17 +83,11 @@ typedef unsigned long ulg;
 #  endif
 #endif
 
-#ifdef DYN_ALLOC
 #  define DECLARE(type, array, size)  static type * array
 #  define ALLOC(type, array, size) { \
-      array = (type*)xcalloc((size_t)(((size)+1L)/2), 2*sizeof(type)); \
+      array = (type*)xzalloc((size_t)(((size)+1L)/2) * 2*sizeof(type)); \
    }
 #  define FREE(array) {free(array), array=NULL;}
-#else
-#  define DECLARE(type, array, size)  static type array[size]
-#  define ALLOC(type, array, size)
-#  define FREE(array)
-#endif
 
 #define tab_suffix window
 #define tab_prefix prev	/* hash link (see deflate.c) */
@@ -306,6 +283,7 @@ static int ofd;			/* output file descriptor */
 static unsigned insize;	/* valid bytes in inbuf */
 static unsigned outcnt;	/* bytes in output buffer */
 
+static uint32_t *crc_32_tab;
 
 /* Output a 16 bit value, lsb first */
 static void put_short(ush w)
@@ -322,7 +300,7 @@ static void put_short(ush w)
 /* ========================================================================
  * Signal and error handler.
  */
-static void abort_gzip(int ignored)
+static void abort_gzip(int ATTRIBUTE_UNUSED ignored)
 {
 	exit(ERROR);
 }
@@ -346,7 +324,7 @@ static void write_buf(int fd, void *buf, unsigned cnt)
 	unsigned n;
 
 	while ((n = write(fd, buf, cnt)) != cnt) {
-		if (n == (unsigned) (-1)) bb_error_msg_and_die("can't write");
+		if (n == (unsigned) (-1)) bb_error_msg_and_die(bb_msg_write_error);
 		cnt -= n;
 		buf = (void *) ((char *) buf + n);
 	}
@@ -357,32 +335,13 @@ static void write_buf(int fd, void *buf, unsigned cnt)
  * pointer, then initialize the crc shift register contents instead.
  * Return the current crc in either case.
  */
-static ulg updcrc(uch * s, unsigned n)
+static uint32_t updcrc(uch * s, unsigned n)
 {
-	static ulg crc = (ulg) 0xffffffffL;	/* shift register contents */
-	register ulg c;		/* temporary variable */
-	static unsigned long crc_32_tab[256];
-
-	if (crc_32_tab[1] == 0x00000000L) {
-		unsigned long csr;	/* crc shift register */
-		const unsigned long e = 0xedb88320L;	/* polynomial exclusive-or pattern */
-		int i;			/* counter for all possible eight bit values */
-		int k;			/* byte being shifted into crc apparatus */
-
-		/* Compute table of CRC's. */
-		for (i = 1; i < 256; i++) {
-			csr = i;
-			/* The idea to initialize the register with the byte instead of
-			   * zero was stolen from Haruhiko Okumura's ar002
-			 */
-			for (k = 8; k; k--)
-				csr = csr & 1 ? (csr >> 1) ^ e : csr >> 1;
-			crc_32_tab[i] = csr;
-		}
-	}
+	static uint32_t crc = ~0;	/* shift register contents */
+	uint32_t c;		/* temporary variable */
 
 	if (s == NULL) {
-		c = 0xffffffffL;
+		c = ~0;
 	} else {
 		c = crc;
 		if (n)
@@ -391,7 +350,7 @@ static ulg updcrc(uch * s, unsigned n)
 			} while (--n);
 	}
 	crc = c;
-	return c ^ 0xffffffffL;	/* (instead of ~c for 64-bit machines) */
+	return ~c;
 }
 
 /* bits.c -- output variable-length bit strings
@@ -745,25 +704,26 @@ static unsigned match_start;	/* start of matching string */
 static int eofile;		/* flag set at end of input file */
 static unsigned lookahead;	/* number of valid bytes ahead in window */
 
-static const unsigned max_chain_length = 4096;
+enum {
+	max_chain_length = 4096,
 
 /* To speed up deflation, hash chains are never searched beyond this length.
  * A higher limit improves compression ratio but degrades the speed.
  */
 
-static const unsigned int max_lazy_match = 258;
+	max_lazy_match = 258,
 
 /* Attempt to find a better match only when the current match is strictly
  * smaller than this value. This mechanism is used only for compression
  * levels >= 4.
  */
-#define max_insert_length  max_lazy_match
+	max_insert_length = max_lazy_match,
 /* Insert new strings in the hash table only if the match length
  * is not greater than this length. This saves time but degrades compression.
  * max_insert_length is used only for compression levels <= 3.
  */
 
-static const unsigned good_match = 32;
+	good_match = 32,
 
 /* Use a faster search when the previous match is longer than this */
 
@@ -774,12 +734,13 @@ static const unsigned good_match = 32;
  * found for specific files.
  */
 
-static const int nice_match = 258;	/* Stop searching when current match exceeds this */
+	nice_match = 258	/* Stop searching when current match exceeds this */
 
 /* Note: the deflate() code requires max_lazy >= MIN_MATCH and max_chain >= 4
  * For deflate_fast() (levels <= 3) good is ignored and lazy has a different
  * meaning.
  */
+};
 
 #define EQUAL 0
 /* result of memcmp for equal strings */
@@ -1031,7 +992,7 @@ static void fill_window(void)
  */
 #define FLUSH_BLOCK(eof) \
    flush_block(block_start >= 0L ? (char*)&window[(unsigned)block_start] : \
-                (char*)NULL, (long)strstart - block_start, (eof))
+		(char*)NULL, (long)strstart - block_start, (eof))
 
 /* ===========================================================================
  * Same as above, but achieves better compression. We use a lazy
@@ -1234,6 +1195,9 @@ int gzip_main(int argc, char **argv)
 	ALLOC(uch, window, 2L * WSIZE);
 	ALLOC(ush, tab_prefix, 1L << BITS);
 
+	/* Initialise the CRC32 table */
+	crc_32_tab = bb_crc32_filltable(0);
+	
 	clear_bufs();
 	part_nb = 0;
 
@@ -1254,8 +1218,8 @@ int gzip_main(int argc, char **argv)
 				inFileNum = STDIN_FILENO;
 				outFileNum = STDOUT_FILENO;
 			} else {
-				inFileNum = open(argv[i], O_RDONLY);
-				if (inFileNum < 0 || fstat(inFileNum, &statBuf) < 0)
+				inFileNum = bb_xopen3(argv[i], O_RDONLY, 0);
+				if (fstat(inFileNum, &statBuf) < 0)
 					bb_perror_msg_and_die("%s", argv[i]);
 				time_stamp = statBuf.st_ctime;
 				ifile_size = statBuf.st_size;
@@ -2427,7 +2391,7 @@ static void set_file_type(void)
  */
 
 
-static ulg crc;			/* crc on uncompressed file data */
+static uint32_t crc;			/* crc on uncompressed file data */
 static long header_bytes;	/* number of bytes in gzip header */
 
 static void put_long(ulg n)

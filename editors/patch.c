@@ -26,9 +26,9 @@
 #include <unistd.h>
 #include "busybox.h"
 
-static int copy_lines(FILE *src_stream, FILE *dest_stream, const unsigned int lines_count)
+static unsigned int copy_lines(FILE *src_stream, FILE *dest_stream, const unsigned int lines_count)
 {
-	int i = 0;
+	unsigned int i = 0;
 
 	while (src_stream && (i < lines_count)) {
 		char *line;
@@ -52,31 +52,19 @@ static int copy_lines(FILE *src_stream, FILE *dest_stream, const unsigned int li
  * returns malloc'ed filename
  */
 
-static unsigned char *extract_filename(char *line, unsigned short patch_level)
+static char *extract_filename(char *line, int patch_level)
 {
-	char *filename_start_ptr = line + 4;
+	char *temp, *filename_start_ptr = line + 4;
 	int i;
 
 	/* Terminate string at end of source filename */
-	{
-		char *line_ptr;
-		line_ptr = strchr(filename_start_ptr, '\t');
-		if (!line_ptr) {
-			bb_perror_msg("Malformed line %s", line);
-			return(NULL);
-		}
-		*line_ptr = '\0';
-	}
+	temp = strchr(filename_start_ptr, '\t');
+	if (temp) *temp = 0;
 
-	/* Skip over (patch_level) number of leading directories */
+	/* skip over (patch_level) number of leading directories */
 	for (i = 0; i < patch_level; i++) {
-		char *dirname_ptr;
-
-		dirname_ptr = strchr(filename_start_ptr, '/');
-		if (!dirname_ptr) {
-			break;
-		}
-		filename_start_ptr = dirname_ptr + 1;
+		if(!(temp = strchr(filename_start_ptr, '/'))) break;
+		filename_start_ptr = temp + 1;
 	}
 
 	return(bb_xstrdup(filename_start_ptr));
@@ -88,9 +76,9 @@ static int file_doesnt_exist(const char *filename)
 	return(stat(filename, &statbuf));
 }
 
-extern int patch_main(int argc, char **argv)
+int patch_main(int argc, char **argv)
 {
-	unsigned int patch_level = -1;
+	int patch_level = -1;
 	char *patch_line;
 	int ret;
 	FILE *patch_file = NULL;

@@ -1,17 +1,6 @@
-/*
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+/* Copyright 2002 Laurence Anderson
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU Library General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
 #include <stdio.h>
@@ -28,7 +17,7 @@ typedef struct hardlinks_s {
 	struct hardlinks_s *next;
 } hardlinks_t;
 
-extern char get_header_cpio(archive_handle_t *archive_handle)
+char get_header_cpio(archive_handle_t *archive_handle)
 {
 	static hardlinks_t *saved_hardlinks = NULL;
 	static unsigned short pending_hardlinks = 0;
@@ -66,7 +55,7 @@ extern char get_header_cpio(archive_handle_t *archive_handle)
 	/* There can be padding before archive header */
 	data_align(archive_handle, 4);
 
-	if (archive_xread_all_eof(archive_handle, cpio_header, 110) == 0) {
+	if (archive_xread_all_eof(archive_handle, (unsigned char*)cpio_header, 110) == 0) {
 		return(EXIT_FAILURE);
 	}
 	archive_handle->offset += 110;
@@ -85,9 +74,8 @@ extern char get_header_cpio(archive_handle_t *archive_handle)
 	    file_header->size = tmpsize;
 	}
 
-	file_header->name = (char *) xmalloc(namesize + 1);
+	file_header->name = (char *) xzalloc(namesize + 1);
 	archive_xread_all(archive_handle, file_header->name, namesize); /* Read in filename */
-	file_header->name[namesize] = '\0';
 	archive_handle->offset += namesize;
 
 	/* Update offset amount and skip padding before file contents */
@@ -113,9 +101,8 @@ extern char get_header_cpio(archive_handle_t *archive_handle)
 	}
 
 	if (S_ISLNK(file_header->mode)) {
-		file_header->link_name = (char *) xmalloc(file_header->size + 1);
+		file_header->link_name = (char *) xzalloc(file_header->size + 1);
 		archive_xread_all(archive_handle, file_header->link_name, file_header->size);
-		file_header->link_name[file_header->size] = '\0';
 		archive_handle->offset += file_header->size;
 		file_header->size = 0; /* Stop possible seeks in future */
 	} else {

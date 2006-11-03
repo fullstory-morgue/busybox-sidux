@@ -75,7 +75,7 @@ static char *license_msg[] = {
 #define GUNZIP_OPT_TEST		4
 #define GUNZIP_OPT_DECOMPRESS	8
 
-extern int gunzip_main(int argc, char **argv)
+int gunzip_main(int argc, char **argv)
 {
 	char status = EXIT_SUCCESS;
 	unsigned long opt;
@@ -103,9 +103,7 @@ extern int gunzip_main(int argc, char **argv)
 			src_fd = bb_xopen(old_path, O_RDONLY);
 
 			/* Get the time stamp on the input file. */
-			if (stat(old_path, &stat_buf) < 0) {
-				bb_error_msg_and_die("Couldn't stat file %s", old_path);
-			}
+			xstat(old_path, &stat_buf);
 		}
 
 		/* Check that the input is sane.  */
@@ -139,11 +137,8 @@ extern int gunzip_main(int argc, char **argv)
 				bb_error_msg_and_die("Invalid extension");
 			}
 
-			/* Open output file */
-			dst_fd = bb_xopen(new_path, O_WRONLY | O_CREAT);
-
-			/* Set permissions on the file */
-			chmod(new_path, stat_buf.st_mode);
+			/* Open output file (with correct permissions) */
+			dst_fd = bb_xopen3(new_path, O_WRONLY | O_CREAT, stat_buf.st_mode);
 
 			/* If unzip succeeds remove the old file */
 			delete_path = old_path;

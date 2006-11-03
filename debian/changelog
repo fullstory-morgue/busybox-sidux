@@ -1,3 +1,9 @@
+busybox-kanotix (1.2.2-1) UNRELEASED; urgency=low
+
+  * (NOT RELEASED YET) New upstream release
+
+ -- Kel Modderman <kelmo@kanotixguide.org>  Fri,  3 Nov 2006 11:13:48 +1000
+
 busybox-kanotix (1.1.0-1) unstable; urgency=low
 
   * New upstream release

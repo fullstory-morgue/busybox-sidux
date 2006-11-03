@@ -1,15 +1,17 @@
 /* vi:set ts=4:*/
+/* Copyright 2005 Rob Landley <rob@landley.net>
+ *
+ * Switch from rootfs to another filesystem as the root of the mount tree.
+ *
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
+ */
 
-#include <dirent.h>
+#include "busybox.h"
 #include <fcntl.h>
-#include <stdio.h>
-#include <sys/mount.h>
-#include <sys/stat.h>
-#include <sys/types.h>
+#include <string.h>
 #include <sys/vfs.h>
 #include <unistd.h>
 
-#include "busybox.h"
 
 // Make up for header deficiencies.
 
@@ -36,7 +38,7 @@ static void delete_contents(char *directory)
 	struct stat st;
 
 	// Don't descend into other filesystems
-	if (stat(directory,&st) || st.st_dev != rootdev) return;
+	if (lstat(directory,&st) || st.st_dev != rootdev) return;
 
 	// Recursively delete the contents of directories.
 	if (S_ISDIR(st.st_mode)) {
@@ -47,20 +49,20 @@ static void delete_contents(char *directory)
 				// Skip . and ..
 				if(*newdir=='.' && (!newdir[1] || (newdir[1]=='.' && !newdir[2])))
 					continue;
-				
+
 				// Recurse to delete contents
 				newdir = alloca(strlen(directory) + strlen(d->d_name) + 2);
 				sprintf(newdir, "%s/%s", directory, d->d_name);
 				delete_contents(newdir);
 			}
 			closedir(dir);
-			
+
 			// Directory should now be empty.  Zap it.
 			rmdir(directory);
 		}
-		
+
 	// It wasn't a directory.  Zap it.
-		
+
 	} else unlink(directory);
 }
 
@@ -74,23 +76,23 @@ int switch_root_main(int argc, char *argv[])
 
 	bb_opt_complementally="-2";
 	bb_getopt_ulflags(argc,argv,"c:",&console);
-	
+
 	// Change to new root directory and verify it's a different fs.
 
 	newroot=argv[optind++];
-	
-	if (chdir(newroot) || stat(".", &st1) || stat("/", &st2) ||
+
+	if (chdir(newroot) || lstat(".", &st1) || lstat("/", &st2) ||
 		st1.st_dev == st2.st_dev)
 	{
 		bb_error_msg_and_die("bad newroot %s",newroot);
 	}
 	rootdev=st2.st_dev;
-	
+
 	// Additional sanity checks: we're about to rm -rf /,  so be REALLY SURE
 	// we mean it.  (I could make this a CONFIG option, but I would get email
 	// from all the people who WILL eat their filesystemss.)
 
-	if (stat("/init", &st1) || !S_ISREG(st1.st_mode) || statfs("/", &stfs) ||
+	if (lstat("/init", &st1) || !S_ISREG(st1.st_mode) || statfs("/", &stfs) ||
 		(stfs.f_type != RAMFS_MAGIC && stfs.f_type != TMPFS_MAGIC) ||
 		getpid() != 1)
 	{
@@ -100,13 +102,13 @@ int switch_root_main(int argc, char *argv[])
 	// Zap everything out of rootdev
 
 	delete_contents("/");
-	
+
 	// Overmount / with newdir and chroot into it.  The chdir is needed to
 	// recalculate "." and ".." links.
 
 	if (mount(".", "/", NULL, MS_MOVE, NULL) || chroot(".") || chdir("/"))
 		bb_error_msg_and_die("moving root");
-	
+
 	// If a new console specified, redirect stdin/stdout/stderr to that.
 
 	if (console) {
@@ -118,6 +120,6 @@ int switch_root_main(int argc, char *argv[])
 	}
 
 	// Exec real init.  (This is why we must be pid 1.)
-	execv(argv[optind],argv+optind+1);
+	execv(argv[optind],argv+optind);
 	bb_error_msg_and_die("Bad init '%s'",argv[optind]);
 }

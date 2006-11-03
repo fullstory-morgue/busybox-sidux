@@ -49,12 +49,12 @@
 #include <assert.h>
 #include "busybox.h"
 
-static int print_formatted __P((char *format, int argc, char **argv));
-static void print_direc __P( (char *start, size_t length,
-			int field_width, int precision, char *argument));
+static int print_formatted (char *format, int argc, char **argv);
+static void print_direc (char *start, size_t length,
+			int field_width, int precision, char *argument);
 
 typedef int (*converter)(char *arg, void *result);
-void multiconvert(char *arg, void *result, converter convert)
+static void multiconvert(char *arg, void *result, converter convert)
 {
 	char s[16];
 	if (*arg == '"' || *arg == '\'') {
@@ -63,12 +63,12 @@ void multiconvert(char *arg, void *result, converter convert)
 	}
 	if(convert(arg,result)) fprintf(stderr, "%s", arg);
 }
-	
+
 static unsigned long xstrtoul(char *arg)
 {
 	unsigned long result;
 
-	multiconvert(arg,&result, (converter)safe_strtoul);	
+	multiconvert(arg,&result, (converter)safe_strtoul);
 	return result;
 }
 

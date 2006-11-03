@@ -1,4 +1,7 @@
 /* vi: set sw=4 ts=4: */
+/*
+   Licensed under the GPL v2, see the file LICENSE in this tarball.
+*/
 
 #include <fcntl.h>
 #include <signal.h>
@@ -11,19 +14,21 @@
 #include <utmp.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <ctype.h>
 #include <time.h>
 
 #include "busybox.h"
 
-
-
 /* The shell to run if none is given in the user's passwd entry.  */
+#ifndef DEFAULT_SHELL
+#define DEFAULT_SHELL "/bin/sh"
+#endif
+
+/* Default user.  */
 #define DEFAULT_USER  "root"
 
-//#define SYSLOG_SUCCESS
+/* #define SYSLOG_SUCCESS */
 #define SYSLOG_FAILURE
 
 
@@ -31,7 +36,8 @@
 /* Log the fact that someone has run su */
 
 # if defined( SYSLOG_SUCCESS ) && defined( SYSLOG_FAILURE )
-static void log_su (const char *successful, const char *old_user, const char *tty)
+static void log_su (const char *successful, const char *old_user,
+					const char *tty)
 {
 	syslog ( LOG_NOTICE, "%s%s on %s", successful, old_user, tty);
 }
@@ -59,8 +65,6 @@ static void log_su (const char *successful, const char *old_user, const char *tt
 int su_main ( int argc, char **argv )
 {
 	unsigned long flags;
-	int opt_preserve;
-	int opt_loginshell;
 	char *opt_shell = 0;
 	char *opt_command = 0;
 	char *opt_username = DEFAULT_USER;
@@ -75,11 +79,12 @@ int su_main ( int argc, char **argv )
 
 	flags = bb_getopt_ulflags(argc, argv, "mplc:s:",
 						  &opt_command, &opt_shell);
-	opt_preserve = flags & 3;
-	opt_loginshell = (flags & 4 ? 1 : 0);
+#define SU_OPT_m (3)
+#define SU_OPT_p (3)
+#define SU_OPT_l (4)
 
 	if (optind < argc  && argv[optind][0] == '-' && argv[optind][1] == 0) {
-		opt_loginshell = 1;
+		flags |= SU_OPT_l;
 		++optind;
     }
 
@@ -98,7 +103,8 @@ int su_main ( int argc, char **argv )
 	if ( !old_user )
 #endif
 		{
-		/* getlogin can fail -- usually due to lack of utmp entry. Resort to getpwuid.  */
+		/* getlogin can fail -- usually due to lack of utmp entry.
+		   Resort to getpwuid.  */
 		pw = getpwuid ( cur_uid );
 		old_user = ( pw ? pw->pw_name : "" );
 	}
@@ -116,8 +122,8 @@ int su_main ( int argc, char **argv )
 	/* Make sure pw->pw_shell is non-NULL.  It may be NULL when NEW_USER
 	   is a username that is retrieved via NIS (YP), but that doesn't have
 	   a default shell listed.  */
-	if ( !pw-> pw_shell || !pw->pw_shell [0] )
-		pw-> pw_shell = (char *) DEFAULT_SHELL;
+	if ( !pw->pw_shell || !pw->pw_shell [0] )
+		pw->pw_shell = (char *) DEFAULT_SHELL;
 
 	if ((( cur_uid == 0 ) || correct_password ( pw ))) {
 		log_su_successful(pw->pw_uid, old_user, tty );
@@ -130,10 +136,10 @@ int su_main ( int argc, char **argv )
 	closelog();
 #endif
 
-	if ( !opt_shell && opt_preserve )
+	if ( !opt_shell && (flags & SU_OPT_p))
 		opt_shell = getenv ( "SHELL" );
 
-	if ( opt_shell && cur_uid && restricted_shell ( pw-> pw_shell )) {
+	if ( opt_shell && cur_uid && restricted_shell ( pw->pw_shell )) {
 		/* The user being su'd to has a nonstandard shell, and so is
 		   probably a uucp account or has restricted access.  Don't
 		   compromise the account by allowing access with a standard
@@ -146,11 +152,11 @@ int su_main ( int argc, char **argv )
 		opt_shell = pw->pw_shell;
 
 	change_identity ( pw );
-	setup_environment ( opt_shell, opt_loginshell, !opt_preserve, pw );
-#ifdef CONFIG_SELINUX
+	setup_environment(opt_shell, flags & SU_OPT_l, !(flags & SU_OPT_p), pw);
+#if ENABLE_SELINUX
        set_current_security_context(NULL);
 #endif
-	run_shell ( opt_shell, opt_loginshell, opt_command, (const char**)opt_args);
+	run_shell(opt_shell, flags & SU_OPT_l, opt_command, (const char**)opt_args);
 
 	return EXIT_FAILURE;
 }

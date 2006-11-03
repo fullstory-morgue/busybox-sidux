@@ -19,27 +19,6 @@
 #include "ext2_types.h"		/* Changed from linux/types.h */
 
 /*
- * The second extended filesystem constants/structures
- */
-
-/*
- * Define EXT2FS_DEBUG to produce debug messages
- */
-#undef EXT2FS_DEBUG
-
-/*
- * Define EXT2_PREALLOCATE to preallocate data blocks for expanding files
- */
-#define EXT2_PREALLOCATE
-#define EXT2_DEFAULT_PREALLOC_BLOCKS	8
-
-/*
- * The second extended file system version
- */
-#define EXT2FS_DATE		"95/08/09"
-#define EXT2FS_VERSION		"0.5b"
-
-/*
  * Special inode numbers
  */
 #define EXT2_BAD_INO		 1	/* Bad blocks inode */
@@ -59,14 +38,10 @@
  */
 #define EXT2_SUPER_MAGIC	0xEF53
 
-#ifdef __KERNEL__
-#define EXT2_SB(sb)	(&((sb)->u.ext2_sb))
-#else
 /* Assume that user mode programs are passing in an ext2fs superblock, not
  * a kernel struct super_block.  This will allow us to call the feature-test
  * macros from user land. */
 #define EXT2_SB(sb)	(sb)
-#endif
 
 /*
  * Maximal count of links to a file
@@ -80,20 +55,12 @@
 #define EXT2_MAX_BLOCK_LOG_SIZE		16	/* 65536 */
 #define EXT2_MIN_BLOCK_SIZE	(1 << EXT2_MIN_BLOCK_LOG_SIZE)
 #define EXT2_MAX_BLOCK_SIZE	(1 << EXT2_MAX_BLOCK_LOG_SIZE)
-#ifdef __KERNEL__
-#define EXT2_BLOCK_SIZE(s)	((s)->s_blocksize)
-#define EXT2_BLOCK_SIZE_BITS(s)	((s)->s_blocksize_bits)
-#define EXT2_ADDR_PER_BLOCK_BITS(s)	(EXT2_SB(s)->addr_per_block_bits)
-#define EXT2_INODE_SIZE(s)	(EXT2_SB(s)->s_inode_size)
-#define EXT2_FIRST_INO(s)	(EXT2_SB(s)->s_first_ino)
-#else
 #define EXT2_BLOCK_SIZE(s)	(EXT2_MIN_BLOCK_SIZE << (s)->s_log_block_size)
 #define EXT2_BLOCK_SIZE_BITS(s)	((s)->s_log_block_size + 10)
 #define EXT2_INODE_SIZE(s)	(((s)->s_rev_level == EXT2_GOOD_OLD_REV) ? \
 				 EXT2_GOOD_OLD_INODE_SIZE : (s)->s_inode_size)
 #define EXT2_FIRST_INO(s)	(((s)->s_rev_level == EXT2_GOOD_OLD_REV) ? \
 				 EXT2_GOOD_OLD_FIRST_INO : (s)->s_first_ino)
-#endif
 #define EXT2_ADDR_PER_BLOCK(s)	(EXT2_BLOCK_SIZE(s) / sizeof(__u32))
 
 /*
@@ -102,13 +69,8 @@
 #define EXT2_MIN_FRAG_SIZE		EXT2_MIN_BLOCK_SIZE
 #define EXT2_MAX_FRAG_SIZE		EXT2_MAX_BLOCK_SIZE
 #define EXT2_MIN_FRAG_LOG_SIZE		EXT2_MIN_BLOCK_LOG_SIZE
-#ifdef __KERNEL__
-# define EXT2_FRAG_SIZE(s)		(EXT2_SB(s)->s_frag_size)
-# define EXT2_FRAGS_PER_BLOCK(s)	(EXT2_SB(s)->s_frags_per_block)
-#else
 # define EXT2_FRAG_SIZE(s)		(EXT2_MIN_FRAG_SIZE << (s)->s_log_frag_size)
 # define EXT2_FRAGS_PER_BLOCK(s)	(EXT2_BLOCK_SIZE(s) / EXT2_FRAG_SIZE(s))
-#endif
 
 /*
  * ACL structures
@@ -193,12 +155,7 @@ struct ext2_dx_countlimit {
 /* limits imposed by 16-bit value gd_free_{blocks,inode}_count */
 #define EXT2_MAX_BLOCKS_PER_GROUP(s)	((1 << 16) - 8)
 #define EXT2_MAX_INODES_PER_GROUP(s)	((1 << 16) - EXT2_INODES_PER_BLOCK(s))
-#ifdef __KERNEL__
-#define EXT2_DESC_PER_BLOCK(s)		(EXT2_SB(s)->s_desc_per_block)
-#define EXT2_DESC_PER_BLOCK_BITS(s)	(EXT2_SB(s)->s_desc_per_block_bits)
-#else
 #define EXT2_DESC_PER_BLOCK(s)		(EXT2_BLOCK_SIZE(s) / sizeof (struct ext2_group_desc))
-#endif
 
 /*
  * Constants relative to the data blocks
@@ -231,9 +188,9 @@ struct ext2_dx_countlimit {
 #define EXT2_IMAGIC_FL			0x00002000
 #define EXT3_JOURNAL_DATA_FL		0x00004000 /* file data should be journaled */
 #define EXT2_NOTAIL_FL			0x00008000 /* file tail should not be merged */
-#define EXT2_DIRSYNC_FL 		0x00010000 /* Synchronous directory modifications */
+#define EXT2_DIRSYNC_FL			0x00010000 /* Synchronous directory modifications */
 #define EXT2_TOPDIR_FL			0x00020000 /* Top of directory hierarchies*/
-#define EXT3_EXTENTS_FL 		0x00080000 /* Inode uses extents */
+#define EXT3_EXTENTS_FL			0x00080000 /* Inode uses extents */
 #define EXT2_RESERVED_FL		0x80000000 /* reserved for ext2 lib */
 
 #define EXT2_FL_USER_VISIBLE		0x0003DFFF /* User visible flags */
@@ -365,38 +322,6 @@ struct ext2_inode_large {
 
 #define i_size_high	i_dir_acl
 
-#if defined(__KERNEL__) || defined(__linux__)
-#define i_reserved1	osd1.linux1.l_i_reserved1
-#define i_frag		osd2.linux2.l_i_frag
-#define i_fsize		osd2.linux2.l_i_fsize
-#define i_uid_low	i_uid
-#define i_gid_low	i_gid
-#define i_uid_high	osd2.linux2.l_i_uid_high
-#define i_gid_high	osd2.linux2.l_i_gid_high
-#define i_reserved2	osd2.linux2.l_i_reserved2
-
-#else
-#if defined(__GNU__)
-
-#define i_translator	osd1.hurd1.h_i_translator
-#define i_frag		osd2.hurd2.h_i_frag;
-#define i_fsize		osd2.hurd2.h_i_fsize;
-#define i_uid_high	osd2.hurd2.h_i_uid_high
-#define i_gid_high	osd2.hurd2.h_i_gid_high
-#define i_author	osd2.hurd2.h_i_author
-
-#else
-#if defined(__masix__)
-
-#define i_reserved1	osd1.masix1.m_i_reserved1
-#define i_frag		osd2.masix2.m_i_frag
-#define i_fsize		osd2.masix2.m_i_fsize
-#define i_reserved2	osd2.masix2.m_i_reserved2
-
-#endif  /* __masix__ */
-#endif  /* __GNU__ */
-#endif	/* defined(__KERNEL__) || defined(__linux__) */
-
 /*
  * File system states
  */
@@ -501,12 +426,12 @@ struct ext2_super_block {
 	__u32	s_last_orphan;		/* start of list of inodes to delete */
 	__u32	s_hash_seed[4];		/* HTREE hash seed */
 	__u8	s_def_hash_version;	/* Default hash version to use */
-	__u8	s_jnl_backup_type; 	/* Default type of journal backup */
+	__u8	s_jnl_backup_type;	/* Default type of journal backup */
 	__u16	s_reserved_word_pad;
 	__u32	s_default_mount_opts;
 	__u32	s_first_meta_bg;	/* First metablock group */
 	__u32	s_mkfs_time;		/* When the filesystem was created */
-	__u32	s_jnl_blocks[17]; 	/* Backup of the journal inode */
+	__u32	s_jnl_blocks[17];	/* Backup of the journal inode */
 	__u32	s_reserved[172];	/* Padding to the end of the block */
 };
 
@@ -585,7 +510,7 @@ struct ext2_super_block {
 #define EXT2_DEFM_XATTR_USER	0x0004
 #define EXT2_DEFM_ACL		0x0008
 #define EXT2_DEFM_UID16		0x0010
-#define EXT3_DEFM_JMODE		0x0060 
+#define EXT3_DEFM_JMODE		0x0060
 #define EXT3_DEFM_JMODE_DATA	0x0020
 #define EXT3_DEFM_JMODE_ORDERED	0x0040
 #define EXT3_DEFM_JMODE_WBACK	0x0060

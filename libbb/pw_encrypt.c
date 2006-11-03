@@ -20,12 +20,12 @@
  *
  */
 
+#include "libbb.h"
 #include <string.h>
 #include <crypt.h>
-#include "libbb.h"
 
 
-extern char *pw_encrypt(const char *clear, const char *salt)
+char *pw_encrypt(const char *clear, const char *salt)
 {
 	static char cipher[128];
 	char *cp;

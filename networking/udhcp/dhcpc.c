@@ -4,22 +4,9 @@
  *
  * Russ Dill <Russ.Dill@asu.edu> July 2001
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  */
 
-#include <sys/time.h>
 #include <sys/file.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -40,7 +27,6 @@
 #include "options.h"
 #include "clientpacket.h"
 #include "clientsocket.h"
-#include "script.h"
 #include "socket.h"
 #include "signalpipe.h"
 
@@ -70,40 +56,10 @@ struct client_config_t client_config = {
 	.hostname = NULL,
 	.fqdn = NULL,
 	.ifindex = 0,
+	.retries = 3,
+	.timeout = 3,
 	.arp = "\0\0\0\0\0\0",		/* appease gcc-3.0 */
 };
-
-#ifndef IN_BUSYBOX
-static void __attribute__ ((noreturn)) show_usage(void)
-{
-	printf(
-"Usage: udhcpc [OPTIONS]\n\n"
-"  -c, --clientid=CLIENTID         Set client identifier - type is first char\n"
-"  -C, --clientid-none             Suppress default client identifier\n"
-"  -V, --vendorclass=CLASSID       Set vendor class identifier\n"
-"  -H, --hostname=HOSTNAME         Client hostname\n"
-"  -h                              Alias for -H\n"
-"  -F, --fqdn=FQDN                 Client fully qualified domain name\n"
-"  -f, --foreground                Do not fork after getting lease\n"
-"  -b, --background                Fork to background if lease cannot be\n"
-"                                  immediately negotiated.\n"
-"  -i, --interface=INTERFACE       Interface to use (default: eth0)\n"
-"  -n, --now                       Exit with failure if lease cannot be\n"
-"                                  immediately negotiated.\n"
-"  -p, --pidfile=file              Store process ID of daemon in file\n"
-"  -q, --quit                      Quit after obtaining lease\n"
-"  -r, --request=IP                IP address to request (default: none)\n"
-"  -s, --script=file               Run file at dhcp events (default:\n"
-"                                  " DEFAULT_SCRIPT ")\n"
-"  -v, --version                   Display version\n"
-	);
-	exit(0);
-}
-#else
-#define show_usage bb_show_usage
-extern void show_usage(void) __attribute__ ((noreturn));
-#endif
-
 
 /* just a little helper */
 static void change_mode(int new_mode)
@@ -128,7 +84,7 @@ static void perform_renew(void)
 		state = RENEW_REQUESTED;
 		break;
 	case RENEW_REQUESTED: /* impatient are we? fine, square 1 */
-		run_script(NULL, "deconfig");
+		udhcp_run_script(NULL, "deconfig");
 	case REQUESTING:
 	case RELEASED:
 		change_mode(LISTEN_RAW);
@@ -160,7 +116,7 @@ static void perform_release(void)
 		LOG(LOG_INFO, "Unicasting a release of %s to %s",
 				inet_ntoa(temp_addr), buffer);
 		send_release(server_addr, requested_ip); /* unicast */
-		run_script(NULL, "deconfig");
+		udhcp_run_script(NULL, "deconfig");
 	}
 	LOG(LOG_INFO, "Entering released state");
 
@@ -172,17 +128,13 @@ static void perform_release(void)
 
 static void client_background(void)
 {
-	background(client_config.pidfile);
+	udhcp_background(client_config.pidfile);
 	client_config.foreground = 1; /* Do not fork again. */
 	client_config.background_if_no_lease = 0;
 }
 
 
-#ifdef COMBINED_BINARY
 int udhcpc_main(int argc, char *argv[])
-#else
-int main(int argc, char *argv[])
-#endif
 {
 	uint8_t *temp, *message;
 	unsigned long t1 = 0, t2 = 0, xid = 0;
@@ -208,43 +160,45 @@ int main(int argc, char *argv[])
 		{"hostname",	required_argument,	0, 'h'},
 		{"fqdn",	required_argument,	0, 'F'},
 		{"interface",	required_argument,	0, 'i'},
-		{"now", 	no_argument,		0, 'n'},
+		{"now",		no_argument,		0, 'n'},
 		{"pidfile",	required_argument,	0, 'p'},
 		{"quit",	no_argument,		0, 'q'},
 		{"request",	required_argument,	0, 'r'},
 		{"script",	required_argument,	0, 's'},
+		{"timeout",	required_argument,	0, 'T'},
 		{"version",	no_argument,		0, 'v'},
+		{"retries",	required_argument,	0, 't'},
 		{0, 0, 0, 0}
 	};
 
 	/* get options */
 	while (1) {
 		int option_index = 0;
-		c = getopt_long(argc, argv, "c:CV:fbH:h:F:i:np:qr:s:v", arg_options, &option_index);
+		c = getopt_long(argc, argv, "c:CV:fbH:h:F:i:np:qr:s:T:t:v", arg_options, &option_index);
 		if (c == -1) break;
 
 		switch (c) {
 		case 'c':
-			if (no_clientid) show_usage();
+			if (no_clientid) bb_show_usage();
 			len = strlen(optarg) > 255 ? 255 : strlen(optarg);
-			if (client_config.clientid) free(client_config.clientid);
+			free(client_config.clientid);
 			client_config.clientid = xmalloc(len + 2);
 			client_config.clientid[OPT_CODE] = DHCP_CLIENT_ID;
 			client_config.clientid[OPT_LEN] = len;
 			client_config.clientid[OPT_DATA] = '\0';
-			strncpy(client_config.clientid + OPT_DATA, optarg, len);
+			strncpy((char*)client_config.clientid + OPT_DATA, optarg, len);
 			break;
 		case 'C':
-			if (client_config.clientid) show_usage();
+			if (client_config.clientid) bb_show_usage();
 			no_clientid = 1;
 			break;
 		case 'V':
 			len = strlen(optarg) > 255 ? 255 : strlen(optarg);
-			if (client_config.vendorclass) free(client_config.vendorclass);
+			free(client_config.vendorclass);
 			client_config.vendorclass = xmalloc(len + 2);
 			client_config.vendorclass[OPT_CODE] = DHCP_VENDOR;
 			client_config.vendorclass[OPT_LEN] = len;
-			strncpy(client_config.vendorclass + OPT_DATA, optarg, len);
+			strncpy((char*)client_config.vendorclass + OPT_DATA, optarg, len);
 			break;
 		case 'f':
 			client_config.foreground = 1;
@@ -255,15 +209,15 @@ int main(int argc, char *argv[])
 		case 'h':
 		case 'H':
 			len = strlen(optarg) > 255 ? 255 : strlen(optarg);
-			if (client_config.hostname) free(client_config.hostname);
+			free(client_config.hostname);
 			client_config.hostname = xmalloc(len + 2);
 			client_config.hostname[OPT_CODE] = DHCP_HOST_NAME;
 			client_config.hostname[OPT_LEN] = len;
-			strncpy(client_config.hostname + 2, optarg, len);
+			strncpy((char*)client_config.hostname + 2, optarg, len);
 			break;
 		case 'F':
 			len = strlen(optarg) > 255 ? 255 : strlen(optarg);
-			if (client_config.fqdn) free(client_config.fqdn);
+			free(client_config.fqdn);
 			client_config.fqdn = xmalloc(len + 5);
 			client_config.fqdn[OPT_CODE] = DHCP_FQDN;
 			client_config.fqdn[OPT_LEN] = len + 3;
@@ -276,7 +230,7 @@ int main(int argc, char *argv[])
 			client_config.fqdn[OPT_LEN + 1] = 0x1;
 			client_config.fqdn[OPT_LEN + 2] = 0;
 			client_config.fqdn[OPT_LEN + 3] = 0;
-			strncpy(client_config.fqdn + 5, optarg, len);
+			strncpy((char*)client_config.fqdn + 5, optarg, len);
 			break;
 		case 'i':
 			client_config.interface =  optarg;
@@ -296,17 +250,23 @@ int main(int argc, char *argv[])
 		case 's':
 			client_config.script = optarg;
 			break;
+		case 'T':
+			client_config.timeout = atoi(optarg);
+			break;
+		case 't':
+			client_config.retries = atoi(optarg);
+			break;
 		case 'v':
-			printf("udhcpcd, version %s\n\n", VERSION);
+			printf("version %s\n\n", BB_VER);
 			return 0;
 			break;
 		default:
-			show_usage();
+			bb_show_usage();
 		}
 	}
 
 	/* Start the log, sanitize fd's, and write a pid file */
-	start_log_and_pid("udhcpc", client_config.pidfile);
+	udhcp_start_log_and_pid("udhcpc", client_config.pidfile);
 
 	if (read_interface(client_config.interface, &client_config.ifindex,
 			   NULL, client_config.arp) < 0)
@@ -322,12 +282,12 @@ int main(int argc, char *argv[])
 	}
 
 	if (!client_config.vendorclass) {
-		client_config.vendorclass = xmalloc(sizeof("udhcp "VERSION) + 2);
+		client_config.vendorclass = xmalloc(sizeof("udhcp "BB_VER) + 2);
 		client_config.vendorclass[OPT_CODE] = DHCP_VENDOR;
-		client_config.vendorclass[OPT_LEN] = sizeof("udhcp "VERSION) - 1;
+		client_config.vendorclass[OPT_LEN] = sizeof("udhcp "BB_VER) - 1;
 		client_config.vendorclass[OPT_DATA] = 1;
-		memcpy(&client_config.vendorclass[OPT_DATA], 
-			"udhcp "VERSION, sizeof("udhcp "VERSION) - 1);
+		memcpy(&client_config.vendorclass[OPT_DATA],
+			"udhcp "BB_VER, sizeof("udhcp "BB_VER) - 1);
 	}
 
 
@@ -335,7 +295,7 @@ int main(int argc, char *argv[])
 	udhcp_sp_setup();
 
 	state = INIT_SELECTING;
-	run_script(NULL, "deconfig");
+	udhcp_run_script(NULL, "deconfig");
 	change_mode(LISTEN_RAW);
 
 	for (;;) {
@@ -365,24 +325,24 @@ int main(int argc, char *argv[])
 			/* timeout dropped to zero */
 			switch (state) {
 			case INIT_SELECTING:
-				if (packet_num < 3) {
+				if (packet_num < client_config.retries) {
 					if (packet_num == 0)
 						xid = random_xid();
 
 					/* send discover packet */
 					send_discover(xid, requested_ip); /* broadcast */
 
-					timeout = now + ((packet_num == 2) ? 4 : 2);
+					timeout = now + client_config.timeout;
 					packet_num++;
 				} else {
-					run_script(NULL, "leasefail");
+					udhcp_run_script(NULL, "leasefail");
 					if (client_config.background_if_no_lease) {
 						LOG(LOG_INFO, "No lease, forking to background.");
 						client_background();
 					} else if (client_config.abort_if_no_lease) {
 						LOG(LOG_INFO, "No lease, failing.");
 						return 1;
-				  	}
+					}
 					/* wait to try again */
 					packet_num = 0;
 					timeout = now + 60;
@@ -390,7 +350,7 @@ int main(int argc, char *argv[])
 				break;
 			case RENEW_REQUESTED:
 			case REQUESTING:
-				if (packet_num < 3) {
+				if (packet_num < client_config.retries) {
 					/* send request packet */
 					if (state == RENEW_REQUESTED)
 						send_renew(xid, server_addr, requested_ip); /* unicast */
@@ -400,7 +360,7 @@ int main(int argc, char *argv[])
 					packet_num++;
 				} else {
 					/* timed out, go back to init state */
-					if (state == RENEW_REQUESTED) run_script(NULL, "deconfig");
+					if (state == RENEW_REQUESTED) udhcp_run_script(NULL, "deconfig");
 					state = INIT_SELECTING;
 					timeout = now;
 					packet_num = 0;
@@ -434,7 +394,7 @@ int main(int argc, char *argv[])
 					/* timed out, enter init state */
 					state = INIT_SELECTING;
 					LOG(LOG_INFO, "Lease lost, entering init state");
-					run_script(NULL, "deconfig");
+					udhcp_run_script(NULL, "deconfig");
 					timeout = now;
 					packet_num = 0;
 					change_mode(LISTEN_RAW);
@@ -455,7 +415,7 @@ int main(int argc, char *argv[])
 			/* a packet is ready, read it */
 
 			if (listen_mode == LISTEN_KERNEL)
-				len = get_packet(&packet, fd);
+				len = udhcp_get_packet(&packet, fd);
 			else len = get_raw_packet(&packet, fd);
 
 			if (len == -1 && errno != EINTR) {
@@ -469,6 +429,7 @@ int main(int argc, char *argv[])
 					(unsigned long) packet.xid, xid);
 				continue;
 			}
+
 			/* Ignore packets that aren't for us */
 			if (memcmp(packet.chaddr, client_config.arp, 6)) {
 				DEBUG(LOG_INFO, "packet does not have our chaddr -- ignoring");
@@ -522,7 +483,7 @@ int main(int argc, char *argv[])
 					start = now;
 					timeout = t1 + start;
 					requested_ip = packet.yiaddr;
-					run_script(&packet,
+					udhcp_run_script(&packet,
 						   ((state == RENEWING || state == REBINDING) ? "renew" : "bound"));
 
 					state = BOUND;
@@ -535,9 +496,9 @@ int main(int argc, char *argv[])
 				} else if (*message == DHCPNAK) {
 					/* return to init state */
 					LOG(LOG_INFO, "Received DHCP NAK");
-					run_script(&packet, "nak");
+					udhcp_run_script(&packet, "nak");
 					if (state != REQUESTING)
-						run_script(NULL, "deconfig");
+						udhcp_run_script(NULL, "deconfig");
 					state = INIT_SELECTING;
 					timeout = now;
 					requested_ip = 0;

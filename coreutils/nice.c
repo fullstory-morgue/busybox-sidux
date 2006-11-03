@@ -26,7 +26,6 @@
 #include <limits.h>
 #include <errno.h>
 #include <unistd.h>
-#include <sys/time.h>
 #include <sys/resource.h>
 #include "busybox.h"
 
@@ -77,7 +76,7 @@ int nice_main(int argc, char **argv)
 			bb_perror_msg_and_die(Xetpriority_msg, 's');
 		}
 	}
-	
+
 	execvp(*argv, argv);		/* Now exec the desired program. */
 
 	/* The exec failed... */

@@ -2,9 +2,8 @@
 #ifndef _DHCPC_H
 #define _DHCPC_H
 
-#ifndef DEFAULT_SCRIPT
-#define DEFAULT_SCRIPT  "/usr/share/udhcpc/default.script"
-#endif
+/* grab define DEFAULT_SCRIPT */
+#include "libbb_udhcp.h"
 
 #define INIT_SELECTING	0
 #define REQUESTING	1
@@ -29,6 +28,8 @@ struct client_config_t {
 	uint8_t *hostname;		/* Optional hostname to use */
 	uint8_t *fqdn;			/* Optional fully qualified domain name to use */
 	int ifindex;			/* Index number of the interface to use */
+	int retries;			/* Max number of request packets */        
+	int timeout;			/* Number of seconds to try to get a lease */
 	uint8_t arp[6];			/* Our arp address */
 };
 

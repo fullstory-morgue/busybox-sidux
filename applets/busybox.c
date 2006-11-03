@@ -1,17 +1,22 @@
 /* vi: set sw=4 ts=4: */
+/*
+ * BusyBox' main applet dispatcher.
+ *
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
+ */
+#include "busybox.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <stdlib.h>
-#include "busybox.h"
 #if ENABLE_LOCALE_SUPPORT
 #include <locale.h>
 #else
 #define setlocale(x,y)
 #endif
 
-const char *bb_applet_name;
+const char *bb_applet_name ATTRIBUTE_EXTERNALLY_VISIBLE;
 
 #ifdef CONFIG_FEATURE_INSTALLER
 /*
@@ -108,7 +113,7 @@ int busybox_main(int argc, char **argv)
 	}
 
 	/* Deal with --help.  (Also print help when called with no arguments) */
-	
+
 	if (argc==1 || !strcmp(argv[1],"--help") ) {
 		if (argc>2) {
 			run_applet_by_name(bb_applet_name=argv[2], 2, argv);
@@ -143,15 +148,7 @@ int busybox_main(int argc, char **argv)
 			printf("\n\n");
 			exit(0);
 		}
-	} else run_applet_by_name(bb_applet_name=argv[1], argc-1, argv+1);
-	
+	} else run_applet_by_name(argv[1], argc-1, argv+1);
+
 	bb_error_msg_and_die("applet not found");
 }
-
-/*
-Local Variables:
-c-file-style: "linux"
-c-basic-offset: 4
-tab-width: 4
-End:
-*/

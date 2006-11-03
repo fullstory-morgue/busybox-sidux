@@ -22,11 +22,12 @@ static gid_t gid = -1;
 
 static int (*chown_func)(const char *, uid_t, gid_t) = chown;
 
-static int fileAction(const char *fileName, struct stat *statbuf, void* junk)
+static int fileAction(const char *fileName, struct stat *statbuf,
+		void ATTRIBUTE_UNUSED *junk)
 {
 	if (!chown_func(fileName,
-				(uid == -1) ? statbuf->st_uid : uid,
-				(gid == -1) ? statbuf->st_gid : gid)) {
+				(uid == (uid_t)-1) ? statbuf->st_uid : uid,
+				(gid == (gid_t)-1) ? statbuf->st_gid : gid)) {
 		return TRUE;
 	}
 	bb_perror_msg("%s", fileName);	/* A filename could have % in it... */
@@ -75,11 +76,3 @@ int chown_main(int argc, char **argv)
 
 	return retval;
 }
-
-/*
-Local Variables:
-c-file-style: "linux"
-c-basic-offset: 4
-tab-width: 4
-End:
-*/

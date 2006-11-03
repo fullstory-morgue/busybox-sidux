@@ -55,22 +55,10 @@
  *   Restructured (and partly rewritten) by:
  *   Björn Ekwall <bj0rn@blox.se> February 1999
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
+#include "busybox.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stddef.h>
@@ -83,7 +71,6 @@
 #include <getopt.h>
 #include <fcntl.h>
 #include <sys/utsname.h>
-#include "busybox.h"
 
 #if !defined(CONFIG_FEATURE_2_4_MODULES) && \
 	!defined(CONFIG_FEATURE_2_6_MODULES)
@@ -128,6 +115,14 @@ extern int insmod_ng_main( int argc, char **argv);
 #define CONFIG_USE_GOT_ENTRIES
 #define CONFIG_GOT_ENTRY_SIZE 8
 #define CONFIG_USE_SINGLE
+#endif
+
+/* blackfin */
+#if defined(BFIN)
+#define MATCH_MACHINE(x) (x == EM_BLACKFIN)
+#define SHT_RELM	SHT_RELA
+#define Elf32_RelM	Elf32_Rela
+#define ELFCLASSM	ELFCLASS32
 #endif
 
 /* CRIS */
@@ -200,6 +195,15 @@ extern int insmod_ng_main( int argc, char **argv);
 #define CONFIG_USE_SINGLE
 #endif
 
+/* Microblaze */
+#if defined(__microblaze__)
+#define CONFIG_USE_SINGLE
+#define MATCH_MACHINE(x) (x == EM_XILINX_MICROBLAZE)
+#define SHT_RELM	SHT_RELA
+#define Elf32_RelM	Elf32_Rela
+#define ELFCLASSM	ELFCLASS32
+#endif
+
 /* MIPS */
 #if defined(__mips__)
 #define MATCH_MACHINE(x) (x == EM_MIPS || x == EM_MIPS_RS3_LE)
@@ -268,8 +272,8 @@ extern int insmod_ng_main( int argc, char **argv);
 #define CONFIG_USE_SINGLE
 /* the SH changes have only been tested in =little endian= mode */
 /* I'm not sure about big endian, so let's warn: */
-#if defined(__sh__) && defined(__BIG_ENDIAN__)
-#error insmod.c may require changes for use on big endian SH
+#if defined(__sh__) && BB_BIG_ENDIAN
+# error insmod.c may require changes for use on big endian SH
 #endif
 /* it may or may not work on the SH1/SH2... Error on those also */
 #if ((!(defined(__SH3__) || defined(__SH4__) || defined(__SH5__)))) && (defined(__sh__))
@@ -295,7 +299,7 @@ extern int insmod_ng_main( int argc, char **argv);
 #define CONFIG_PLT_ENTRY_SIZE 8
 #define CONFIG_USE_SINGLE
 #ifndef EM_CYGNUS_V850	/* grumble */
-#define EM_CYGNUS_V850 	0x9080
+#define EM_CYGNUS_V850	0x9080
 #endif
 #define SYMBOL_PREFIX	"_"
 #endif
@@ -343,7 +347,7 @@ extern int insmod_ng_main( int argc, char **argv);
 
 
 #ifndef MODUTILS_MODULE_H
-static const int MODUTILS_MODULE_H = 1;
+/* Why? static const int MODUTILS_MODULE_H = 1;*/
 
 #ident "$Id: insmod.c,v 1.126 2004/12/26 09:13:32 vapier Exp $"
 
@@ -364,9 +368,11 @@ static const int MODUTILS_MODULE_H = 1;
 #undef tgt_sizeof_char_p
 #undef tgt_sizeof_void_p
 #undef tgt_long
-static const int tgt_sizeof_long = 8;
-static const int tgt_sizeof_char_p = 8;
-static const int tgt_sizeof_void_p = 8;
+enum {
+	tgt_sizeof_long = 8,
+	tgt_sizeof_char_p = 8,
+	tgt_sizeof_void_p = 8
+};
 #define tgt_long		long long
 #endif
 
@@ -441,23 +447,26 @@ struct new_module_info
 };
 
 /* Bits of module.flags.  */
-static const int NEW_MOD_RUNNING = 1;
-static const int NEW_MOD_DELETED = 2;
-static const int NEW_MOD_AUTOCLEAN = 4;
-static const int NEW_MOD_VISITED = 8;
-static const int NEW_MOD_USED_ONCE = 16;
+enum {
+	NEW_MOD_RUNNING = 1,
+	NEW_MOD_DELETED = 2,
+	NEW_MOD_AUTOCLEAN = 4,
+	NEW_MOD_VISITED = 8,
+	NEW_MOD_USED_ONCE = 16
+};
 
 int init_module(const char *name, const struct new_module *);
 int query_module(const char *name, int which, void *buf,
 		size_t bufsize, size_t *ret);
 
 /* Values for query_module's which.  */
-
-static const int QM_MODULES = 1;
-static const int QM_DEPS = 2;
-static const int QM_REFS = 3;
-static const int QM_SYMBOLS = 4;
-static const int QM_INFO = 5;
+enum {
+	QM_MODULES = 1,
+	QM_DEPS = 2,
+	QM_REFS = 3,
+	QM_SYMBOLS = 4,
+	QM_INFO = 5
+};
 
 /*======================================================================*/
 /* The system calls unchanged between 2.0 and 2.1.  */
@@ -501,7 +510,7 @@ int delete_module(const char *);
 
 
 #ifndef MODUTILS_OBJ_H
-static const int MODUTILS_OBJ_H = 1;
+/* Why? static const int MODUTILS_OBJ_H = 1; */
 
 #ident "$Id: insmod.c,v 1.126 2004/12/26 09:13:32 vapier Exp $"
 
@@ -510,12 +519,6 @@ static const int MODUTILS_OBJ_H = 1;
 #include <stdio.h>
 #include <elf.h>
 #include <endian.h>
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define ELFDATAM	ELFDATA2LSB
-#elif __BYTE_ORDER == __BIG_ENDIAN
-#define ELFDATAM	ELFDATA2MSB
-#endif
 
 #ifndef ElfW
 # if ELFCLASSM == ELFCLASS32
@@ -682,9 +685,9 @@ static enum obj_reloc arch_apply_relocation (struct obj_file *f,
 				      ElfW(RelM) *rel, ElfW(Addr) value);
 
 static void arch_create_got (struct obj_file *f);
-
+#if ENABLE_FEATURE_CHECK_TAINTED_MODULE
 static int obj_gpl_license(struct obj_file *f, const char **license);
-
+#endif /* ENABLE_FEATURE_CHECK_TAINTED_MODULE */
 #endif /* obj.h */
 //----------------------------------------------------------------------------
 //--------end of modutils obj.h
@@ -695,12 +698,12 @@ static int obj_gpl_license(struct obj_file *f, const char **license);
 #ifdef SYMBOL_PREFIX
 #define SPFX	SYMBOL_PREFIX
 #else
-#define SPFX 	""
+#define SPFX	""
 #endif
 
 
 #define _PATH_MODULES	"/lib/modules"
-static const int STRVERSIONLEN = 32;
+enum { STRVERSIONLEN = 32 };
 
 /*======================================================================*/
 
@@ -860,8 +863,10 @@ arch_apply_relocation(struct obj_file *f,
 #if defined(CONFIG_USE_GOT_ENTRIES) || defined(CONFIG_USE_PLT_ENTRIES)
 	struct arch_symbol *isym = (struct arch_symbol *) sym;
 #endif
+#if defined(__arm__) || defined(__i386__) || defined(__mc68000__) || defined(__sh__) || defined(__s390__)
 #if defined(CONFIG_USE_GOT_ENTRIES)
 	ElfW(Addr) got = ifile->got ? ifile->got->header.sh_addr : 0;
+#endif
 #endif
 #if defined(CONFIG_USE_PLT_ENTRIES)
 	ElfW(Addr) plt = ifile->plt ? ifile->plt->header.sh_addr : 0;
@@ -892,7 +897,7 @@ arch_apply_relocation(struct obj_file *f,
 			 * (which is .got) similar to branch,
 			 * but is full 32 bits relative */
 
-			assert(got);
+			assert(got != 0);
 			*loc += got - dot;
 			break;
 
@@ -901,7 +906,7 @@ arch_apply_relocation(struct obj_file *f,
 			goto bb_use_plt;
 
 		case R_ARM_GOTOFF: /* address relative to the got */
-			assert(got);
+			assert(got != 0);
 			*loc += v - got;
 			break;
 
@@ -981,6 +986,65 @@ arch_apply_relocation(struct obj_file *f,
 		case R_386_GOTOFF:
 			assert(got != 0);
 			*loc += v - got;
+			break;
+
+#elif defined (__microblaze__)
+		case R_MICROBLAZE_NONE:
+		case R_MICROBLAZE_64_NONE:
+		case R_MICROBLAZE_32_SYM_OP_SYM:
+		case R_MICROBLAZE_32_PCREL:
+			break;
+
+		case R_MICROBLAZE_64_PCREL: {
+			/* dot is the address of the current instruction.
+			 * v is the target symbol address.
+			 * So we need to extract the offset in the code,
+			 * adding v, then subtrating the current address 
+			 * of this instruction.
+			 * Ex: "IMM 0xFFFE  bralid 0x0000" = "bralid 0xFFFE0000"
+			 */
+
+			/* Get split offset stored in code */
+			unsigned int temp = (loc[0] & 0xFFFF) << 16 |
+						(loc[1] & 0xFFFF);
+
+			/* Adjust relative offset. -4 adjustment required 
+			 * because dot points to the IMM insn, but branch
+			 * is computed relative to the branch instruction itself.
+			 */
+			temp += v - dot - 4;
+
+			/* Store back into code */
+			loc[0] = (loc[0] & 0xFFFF0000) | temp >> 16;
+			loc[1] = (loc[1] & 0xFFFF0000) | (temp & 0xFFFF);
+
+			break;
+		}
+
+		case R_MICROBLAZE_32:
+			*loc += v;
+			break;
+
+		case R_MICROBLAZE_64: {
+			/* Get split pointer stored in code */
+			unsigned int temp1 = (loc[0] & 0xFFFF) << 16 |
+						(loc[1] & 0xFFFF);
+
+			/* Add reloc offset */
+			temp1+=v;
+
+			/* Store back into code */
+			loc[0] = (loc[0] & 0xFFFF0000) | temp1 >> 16;
+			loc[1] = (loc[1] & 0xFFFF0000) | (temp1 & 0xFFFF);
+
+			break;
+		}
+
+		case R_MICROBLAZE_32_PCREL_LO:
+		case R_MICROBLAZE_32_LO:
+		case R_MICROBLAZE_SRO32:
+		case R_MICROBLAZE_SRW32:
+			ret = obj_reloc_unhandled;
 			break;
 
 #elif defined(__mc68000__)
@@ -1294,6 +1358,9 @@ arch_apply_relocation(struct obj_file *f,
 				       (word1 & 0x3f);
 			}
 			break;
+
+#elif defined(__powerpc64__)
+		/* PPC64 needs a 2.6 kernel, 2.4 module relocation irrelevant */
 
 #elif defined(__powerpc__)
 
@@ -3321,7 +3388,8 @@ static struct obj_file *obj_load(FILE * fp, int loadprogbits)
 		return NULL;
 	}
 	if (f->header.e_ident[EI_CLASS] != ELFCLASSM
-			|| f->header.e_ident[EI_DATA] != ELFDATAM
+			|| f->header.e_ident[EI_DATA] != (BB_BIG_ENDIAN
+				? ELFDATA2MSB : ELFDATA2LSB)
 			|| f->header.e_ident[EI_VERSION] != EV_CURRENT
 			|| !MATCH_MACHINE(f->header.e_machine)) {
 		bb_error_msg("ELF file not for this architecture");
@@ -3898,7 +3966,7 @@ static void print_load_map(struct obj_file *f)
 
 #endif
 
-extern int insmod_main( int argc, char **argv)
+int insmod_main( int argc, char **argv)
 {
 	int opt;
 	int len;
@@ -4226,9 +4294,8 @@ out:
 #ifdef CONFIG_FEATURE_CLEAN_UP
 	if(fp)
 		fclose(fp);
-	if(tmp1) {
-		free(tmp1);
-	} else {
+	free(tmp1);
+	if(!tmp1) {
 		free(m_name);
 	}
 	free(m_filename);
@@ -4263,7 +4330,7 @@ static const char *moderror(int err)
 	}
 }
 
-extern int insmod_ng_main( int argc, char **argv)
+int insmod_ng_main( int argc, char **argv)
 {
 	int i;
 	int fd;
@@ -4293,9 +4360,7 @@ extern int insmod_ng_main( int argc, char **argv)
 		strcat(options, " ");
 	}
 
-	if ((fd = open(filename, O_RDONLY, 0)) < 0) {
-		bb_perror_msg_and_die("cannot open module `%s'", filename);
-	}
+	fd = bb_xopen3(filename, O_RDONLY, 0);
 
 	fstat(fd, &st);
 	len = st.st_size;

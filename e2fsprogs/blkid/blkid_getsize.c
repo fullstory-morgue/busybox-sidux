@@ -70,7 +70,7 @@ blkid_loff_t blkid_get_dev_size(int fd)
 {
 	int valid_blkgetsize64 = 1;
 #ifdef __linux__
-	struct 		utsname ut;
+	struct		utsname ut;
 #endif
 	unsigned long long size64;
 	unsigned long size;
@@ -173,7 +173,7 @@ int main(int argc, char **argv)
 		perror(argv[0]);
 
 	bytes = blkid_get_dev_size(fd);
-	printf("Device %s has %Ld 1k blocks.\n", argv[1], bytes >> 10);
+	printf("Device %s has %lld 1k blocks.\n", argv[1], bytes >> 10);
 
 	return 0;
 }

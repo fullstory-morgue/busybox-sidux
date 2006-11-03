@@ -28,7 +28,7 @@
 #include "busybox.h"
 #include "libcoreutils/coreutils.h"
 
-extern int cp_main(int argc, char **argv)
+int cp_main(int argc, char **argv)
 {
 	struct stat source_stat;
 	struct stat dest_stat;
@@ -46,7 +46,7 @@ extern int cp_main(int argc, char **argv)
 	}
 	if (flags & 64) {
 		/* Make -r a synonym for -R,
-		 * -r was marked as obsolete in SUSv3, but is included for compatability
+		 * -r was marked as obsolete in SUSv3, but is included for compatibility
 		 */
 		flags |= FILEUTILS_RECUR;
 	}

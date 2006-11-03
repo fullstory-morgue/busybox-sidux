@@ -1,3 +1,4 @@
+/* vi: set sw=4 ts=4: */
 /* route
  *
  * Similar to the standard Unix route, but with only the necessary
@@ -9,11 +10,7 @@
  *              Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  *              (derived from FvK's 'route.c     1.70    01/04/94')
  *
- * This program is free software; you can redistribute it
- * and/or  modify it under  the terms of  the GNU General
- * Public  License as  published  by  the  Free  Software
- * Foundation;  either  version 2 of the License, or  (at
- * your option) any later version.
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  *
  * $Id: route.c,v 1.26 2004/03/19 23:27:08 mjn3 Exp $
  *
@@ -86,7 +83,7 @@
 /* We remap '-' to '#' to avoid problems with getopt. */
 static const char tbl_hash_net_host[] =
 	"\007\001#net\0"
-/* 	"\010\002#host\0" */
+/*	"\010\002#host\0" */
 	"\007\002#host"				/* Since last, we can save a byte. */
 ;
 
@@ -128,7 +125,7 @@ static const char tbl_ipvx[] =
 #endif
 	"\006\041mod\0"
 	"\006\042dyn\0"
-/* 	"\014\043reinstate\0" */
+/*	"\014\043reinstate\0" */
 	"\013\043reinstate"			/* Since last, we can save a byte. */
 ;
 
@@ -166,7 +163,7 @@ static int kw_lookup(const char *kwtbl, char ***pargs)
 static void INET_setroute(int action, char **args)
 {
 	struct rtentry rt;
-	const char *netmask;
+	const char *netmask = NULL;
 	int skfd, isnet, xflag;
 
 	assert((action == RTACTION_ADD) || (action == RTACTION_DEL));
@@ -184,14 +181,33 @@ static void INET_setroute(int action, char **args)
 
 	{
 		const char *target = *args++;
+		char *prefix;
 
+		/* recognize x.x.x.x/mask format. */
+		prefix = strchr(target, '/');
+		if(prefix) {
+			int prefix_len;
+
+			prefix_len = bb_xgetularg10_bnd(prefix+1, 0, 32);
+			mask_in_addr(rt) = htonl( ~ (0xffffffffUL >> prefix_len));
+			*prefix = '\0';
+#if HAVE_NEW_ADDRT
+			rt.rt_genmask.sa_family = AF_INET;
+#endif
+		} else {
+			/* Default netmask. */
+			netmask = bb_INET_default;
+		}
 		/* Prefer hostname lookup is -host flag (xflag==1) was given. */
- 		isnet = INET_resolve(target, (struct sockaddr_in *) &rt.rt_dst,
+		isnet = INET_resolve(target, (struct sockaddr_in *) &rt.rt_dst,
 							 (xflag & HOST_FLAG));
 		if (isnet < 0) {
 			bb_error_msg_and_die("resolving %s", target);
 		}
-
+		if(prefix) {
+			/* do not destroy prefix for process args */
+			*prefix = '/';
+		}
 	}
 
 	if (xflag) {		/* Reinit isnet if -net or -host was specified. */
@@ -200,8 +216,6 @@ static void INET_setroute(int action, char **args)
 
 	/* Fill in the other fields. */
 	rt.rt_flags = ((isnet) ? RTF_UP : (RTF_UP | RTF_HOST));
-
-	netmask = bb_INET_default;
 
 	while (*args) {
 		int k = kw_lookup(tbl_ipvx, &args);
@@ -321,9 +335,7 @@ static void INET_setroute(int action, char **args)
 	}
 
 	/* Create a socket to the INET kernel. */
-	if ((skfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		bb_perror_msg_and_die("socket");
-	}
+	skfd = bb_xsocket(AF_INET, SOCK_DGRAM, 0);
 
 	if (ioctl(skfd, ((action==RTACTION_ADD) ? SIOCADDRT : SIOCDELRT), &rt)<0) {
 		bb_perror_msg_and_die("SIOC[ADD|DEL]RT");
@@ -417,9 +429,7 @@ static void INET6_setroute(int action, char **args)
 	}
 
 	/* Create a socket to the INET6 kernel. */
-	if ((skfd = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-		bb_perror_msg_and_die("socket");
-	}
+	skfd = bb_xsocket(AF_INET6, SOCK_DGRAM, 0);
 
 	rt.rtmsg_ifindex = 0;
 
@@ -459,7 +469,7 @@ static const unsigned int flagvals[] = { /* Must agree with flagchars[]. */
 #define IPV4_MASK (RTF_GATEWAY|RTF_HOST|RTF_REINSTATE|RTF_DYNAMIC|RTF_MODIFIED)
 #define IPV6_MASK (RTF_GATEWAY|RTF_HOST|RTF_DEFAULT|RTF_ADDRCONF|RTF_CACHE)
 
-static const char flagchars[] = 		/* Must agree with flagvals[]. */
+static const char flagchars[] =		/* Must agree with flagvals[]. */
 	"GHRDM"
 #ifdef CONFIG_FEATURE_IPV6
 	"DAC"
@@ -484,6 +494,7 @@ void set_flags(char *flagstr, int flags)
 }
 
 /* also used in netstat */
+void displayroutes(int noresolve, int netstatfmt);
 void displayroutes(int noresolve, int netstatfmt)
 {
 	char devname[64], flags[16], sdest[16], sgw[16];
@@ -645,10 +656,10 @@ static void INET6_displayroutes(int noresolve)
 #define ROUTE_OPT_INET6		0x08 /* Not an actual option. See below. */
 
 /* 1st byte is offset to next entry offset.  2nd byte is return value. */
-static const char tbl_verb[] = 	/* 2nd byte matches RTACTION_* code */
+static const char tbl_verb[] =	/* 2nd byte matches RTACTION_* code */
 	"\006\001add\0"
 	"\006\002del\0"
-/* 	"\011\002delete\0" */
+/*	"\011\002delete\0" */
 	"\010\002delete"			/* Since last, we can save a byte. */
 ;
 
