@@ -1,2 +1,2 @@
-busybox bin/
-debian/overrides/busybox-kanotix usr/share/lintian/overrides
+busybox.static usr/lib/busybox-kanotix
+busybox.links usr/share/busybox-kanotix
