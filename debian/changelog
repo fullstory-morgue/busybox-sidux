@@ -14,7 +14,6 @@ busybox-kanotix (1.2.2-1) unstable; urgency=low
   * Don't bother installing Busybox manpage for our purposes, it most
     certainly includes text that is not relevant to our binary.
   * Add get-orig-source helper target to debian/rules.
-  * 
 
  -- Kel Modderman <kelmo@kanotixguide.org>  Fri,  3 Nov 2006 11:55:40 +1000
 
