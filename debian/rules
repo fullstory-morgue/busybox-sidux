@@ -8,7 +8,7 @@ include /usr/share/cdbs/1/rules/buildcore.mk
 include /usr/share/cdbs/1/rules/debhelper.mk
 #include /usr/share/cdbs/1/rules/simple-patchsys.mk
 
-configure/busybox-kanotix::
+configure/busybox-sidux::
 	@if [ -f $(CURDIR)/debian/config/$(DEB_BUILD_ARCH_CPU) ]; then \
 		install -m0644 $(CURDIR)/debian/config/$(DEB_BUILD_ARCH_CPU) \
 			$(CURDIR)/.config; \
@@ -18,17 +18,17 @@ configure/busybox-kanotix::
 	fi
 	$(MAKE) oldconfig
 
-build/busybox-kanotix::
+build/busybox-sidux::
 	$(MAKE) dep
 	$(MAKE)
 	mv busybox busybox.static
 
-clean/busybox-kanotix::
+clean/busybox-sidux::
 	$(MAKE) distclean
 	rm -f .config busybox.static
 
 get-orig-source:
 	@dh_testdir
 	@test -d ../tarballs || mkdir -p ../tarballs
-	@wget -Nc -T10 -O ../tarballs/busybox-kanotix_$(UVERS).orig.tar.gz \
+	@wget -Nc -T10 -O ../tarballs/busybox-sidux_$(UVERS).orig.tar.gz \
 		http://busybox.net/downloads/busybox-$(UVERS).tar.gz

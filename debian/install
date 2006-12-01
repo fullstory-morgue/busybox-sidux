@@ -1,2 +1,2 @@
-busybox.static usr/lib/busybox-kanotix
-busybox.links usr/share/busybox-kanotix
+busybox.static usr/lib/busybox-sidux
+busybox.links usr/share/busybox-sidux
