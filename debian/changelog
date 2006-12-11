@@ -1,3 +1,9 @@
+busybox-sidux (1.2.2.1-3) UNRELEASED; urgency=low
+
+  * NOT RELEASED YET
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Mon, 11 Dec 2006 14:04:07 +0100
+
 busybox-sidux (1.2.2.1-2) unstable; urgency=low
 
   * enable uname, we need it in linuxrc.
