@@ -1,0 +1,42 @@
+#r16017 | landley | 2006-08-29 17:46:10 -0400 (Tue, 29 Aug 2006) | 14 lines
+#Changed paths:
+#   M /trunk/busybox/Rules.mak
+#
+#There's some strange bug in glibc that triggers if you combine the
+#--gc-sections linker flag with static linking.  If this happens, then
+#the "stdout" variable (used by printf() and such) will only work if stdout
+#is _not_ redirected.  I.E "./busybox" prints stuff, but "./busybox | cat"
+#does not produce any output.  (But even when redirected, "write(1,"blah",4);"
+#continues to work just fine.)
+#
+#This is clearly a glibc bug, but to avoid triggering it I've moved the
+#--gc-sections flag so it only gets added when we're not statically linking.
+#If somebody would like to go poke Ulrich Drepper, you can trivially reproduce
+#this with a "hello world" program, ala:
+#
+#  gcc -static -Wl,--gc-sections hello.c &&  (./a.out | cat)
+#
+diff -Nur trunk/Rules.mak trunk.new/Rules.mak
+--- trunk/Rules.mak	2006-12-05 22:15:02.000000000 +0100
++++ trunk.new/Rules.mak	2006-12-11 13:53:53.000000000 +0100
+@@ -264,8 +264,6 @@
+     CFLAGS +=-g
+ else
+     CFLAGS +=-DNDEBUG
+-    CHECKED_LDFLAGS += $(call check_ld,$(LD),--sort-common,)
+-    CHECKED_LDFLAGS += $(call check_ld,$(LD),--gc-sections,)
+ endif
+ 
+ ifneq ($(strip $(CONFIG_DEBUG_PESSIMIZE)),y)
+@@ -285,6 +283,11 @@
+ STRIPCMD:=$(call check_strip,$(STRIP),-s --remove-section=.note --remove-section=.comment,$(STRIP))
+ ifeq ($(strip $(CONFIG_STATIC)),y)
+     PROG_CFLAGS += $(call check_cc,$(CC),-static,)
++else
++    ifneq ($(strip $(CONFIG_DEBUG)),y)
++        CHECKED_LDFLAGS += $(call check_ld,$(LD),--sort-common,)
++        CHECKED_LDFLAGS += $(call check_ld,$(LD),--gc-sections,)
++    endif
+ endif
+ CFLAGS_SHARED := $(call check_cc,$(CC),-shared,)
+ LIB_CFLAGS+=$(CFLAGS_SHARED)
