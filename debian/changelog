@@ -1,8 +1,10 @@
 busybox-sidux (1.2.2.1-2) unstable; urgency=low
 
   * enable uname, we need it in linuxrc.
+  * don't use --sort-common and --gc-sections for static linking to cicumvent
+    a bug in glibc.
 
- -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Mon, 11 Dec 2006 13:37:54 +0100
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Mon, 11 Dec 2006 13:57:24 +0100
 
 busybox-sidux (1.2.2.1-1) unstable; urgency=low
 
