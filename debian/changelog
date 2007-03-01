@@ -1,8 +1,9 @@
 busybox-sidux (1.4.1-1) unstable; urgency=low
 
   * New upstream release.
+  * slim down .config.
 
- -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Thu,  1 Mar 2007 23:39:40 +0100
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Fri,  2 Mar 2007 00:21:09 +0100
 
 busybox-sidux (1.2.2.1-3) UNRELEASED; urgency=low
 
