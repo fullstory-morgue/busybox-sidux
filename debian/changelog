@@ -2,8 +2,10 @@ busybox-sidux (1.4.1-1) unstable; urgency=low
 
   * New upstream release.
   * slim down .config.
+  * adapt glib Makefile patches.
+  * move to dpatch instead of simple-patchsys.
 
- -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Fri,  2 Mar 2007 00:21:09 +0100
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Fri,  2 Mar 2007 00:34:35 +0100
 
 busybox-sidux (1.2.2.1-3) UNRELEASED; urgency=low
 

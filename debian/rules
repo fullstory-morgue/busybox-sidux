@@ -6,7 +6,7 @@ UVERS := $(shell dpkg-parsechangelog | sed -n 's/^Version: \(.*\)-[0-9]*/\1/p')
 
 include /usr/share/cdbs/1/rules/buildcore.mk
 include /usr/share/cdbs/1/rules/debhelper.mk
-include /usr/share/cdbs/1/rules/simple-patchsys.mk
+include /usr/share/cdbs/1/rules/dpatch.mk
 
 configure/busybox-sidux::
 	@if [ -f $(CURDIR)/debian/config/$(DEB_BUILD_ARCH_CPU) ]; then \

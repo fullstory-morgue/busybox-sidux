@@ -1,0 +1,40 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 01_use_glibc.dpatch by Stefan Lippers-Hollmann <s.l-h@gmx.de>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: No description.
+
+@DPATCH@
+diff -urNad trunk~/Makefile trunk/Makefile
+--- trunk~/Makefile	2007-03-01 23:38:31.000000000 +0100
++++ trunk/Makefile	2007-03-02 00:32:25.000000000 +0100
+@@ -563,8 +563,7 @@
+ quiet_cmd_busybox__ ?= LINK    $@
+       cmd_busybox__ ?= $(srctree)/scripts/trylink $(CC) $(LDFLAGS) \
+       -o $@ \
+-      -Wl,--warn-common -Wl,--sort-common -Wl,--gc-sections \
+-      -Wl,--start-group $(busybox-all) -Wl,--end-group
++      -Wl,--warn-common -Wl,--start-group $(busybox-all) -Wl,--end-group
+ 
+ # Generate System.map
+ quiet_cmd_sysmap = SYSMAP
+diff -urNad trunk~/applets/applets.c trunk/applets/applets.c
+--- trunk~/applets/applets.c	2007-03-01 23:38:43.000000000 +0100
++++ trunk/applets/applets.c	2007-03-02 00:33:20.000000000 +0100
+@@ -15,16 +15,6 @@
+ #include "busybox.h"
+ #include <assert.h>
+ 
+-/* Apparently uclibc defines __GLIBC__ (compat trick?). Oh well. */
+-#if ENABLE_STATIC && defined(__GLIBC__) && !defined(__UCLIBC__)
+-#warning Static linking against glibc produces buggy executables
+-#warning (glibc does not cope well with ld --gc-sections).
+-#warning See sources.redhat.com/bugzilla/show_bug.cgi?id=3400
+-#warning Note that glibc is unsuitable for static linking anyway.
+-#warning If you still want to do it, remove -Wl,--gc-sections
+-#warning from top-level Makefile and remove this warning.
+-#endif
+-
+ #if ENABLE_SHOW_USAGE && !ENABLE_FEATURE_COMPRESS_USAGE
+ static const char usage_messages[] =
+ #define MAKE_USAGE
