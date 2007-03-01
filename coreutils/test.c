@@ -175,14 +175,16 @@ int bb_test(int argc, char **argv)
 {
 	int res;
 
-	if (strcmp(argv[0], "[") == 0) {
-		if (strcmp(argv[--argc], "]")) {
+	if (LONE_CHAR(argv[0], '[')) {
+		--argc;
+		if (NOT_LONE_CHAR(argv[argc], ']')) {
 			bb_error_msg("missing ]");
 			return 2;
 		}
 		argv[argc] = NULL;
 	} else if (strcmp(argv[0], "[[") == 0) {
-		if (strcmp(argv[--argc], "]]")) {
+		--argc;
+		if (strcmp(argv[argc], "]]")) {
 			bb_error_msg("missing ]]");
 			return 2;
 		}
@@ -520,17 +522,17 @@ static int test_eaccess(char *path, int mode)
 	unsigned int euid = geteuid();
 
 	if (stat(path, &st) < 0)
-		return (-1);
+		return -1;
 
 	if (euid == 0) {
 		/* Root can read or write any file. */
 		if (mode != X_OK)
-			return (0);
+			return 0;
 
 		/* Root can execute any file that has any one of the execute
 		   bits set. */
 		if (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))
-			return (0);
+			return 0;
 	}
 
 	if (st.st_uid == euid)  /* owner */
@@ -539,9 +541,9 @@ static int test_eaccess(char *path, int mode)
 		mode <<= 3;
 
 	if (st.st_mode & mode)
-		return (0);
+		return 0;
 
-	return (-1);
+	return -1;
 }
 
 static void initialize_group_array(void)
@@ -556,11 +558,11 @@ static void initialize_group_array(void)
 /* Return non-zero if GID is one that we have in our groups list. */
 static int is_a_group_member(gid_t gid)
 {
-	register int i;
+	int i;
 
 	/* Short-circuit if possible, maybe saving a call to getgroups(). */
 	if (gid == getgid() || gid == getegid())
-		return (1);
+		return 1;
 
 	if (ngroups == 0)
 		initialize_group_array();
@@ -568,9 +570,9 @@ static int is_a_group_member(gid_t gid)
 	/* Search through the list looking for GID. */
 	for (i = 0; i < ngroups; i++)
 		if (gid == group_array[i])
-			return (1);
+			return 1;
 
-	return (0);
+	return 0;
 }
 
 
@@ -578,6 +580,6 @@ static int is_a_group_member(gid_t gid)
 
 int test_main(int argc, char **argv)
 {
-	exit(bb_test(argc, argv));
+	return bb_test(argc, argv);
 }
 

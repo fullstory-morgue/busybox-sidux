@@ -15,12 +15,8 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include <unistd.h>
-#include <stdio.h>
-#include <fcntl.h>
 #include <paths.h>
 #include "libbb.h"
-
 
 #ifdef BB_NOMMU
 void vfork_daemon_rexec(int nochdir, int noclose,
@@ -33,21 +29,21 @@ void vfork_daemon_rexec(int nochdir, int noclose,
 	setsid();
 
 	if (!nochdir)
-		chdir("/");
+		xchdir("/");
 
 	if (!noclose && (fd = open(bb_dev_null, O_RDWR, 0)) != -1) {
 		dup2(fd, STDIN_FILENO);
 		dup2(fd, STDOUT_FILENO);
 		dup2(fd, STDERR_FILENO);
-		if (fd > 2)
-			close(fd);
+		while (fd > 2)
+			close(fd--);
 	}
 
-	vfork_args = xcalloc(sizeof(char *), argc + 3);
-	vfork_args[a++] = "/bin/busybox";
-	while(*argv) {
-	    vfork_args[a++] = *argv;
-	    argv++;
+	vfork_args = xzalloc(sizeof(char *) * (argc + 3));
+	vfork_args[a++] = CONFIG_BUSYBOX_EXEC_PATH;
+	while (*argv) {
+		vfork_args[a++] = *argv;
+		argv++;
 	}
 	vfork_args[a] = foreground_opt;
 	switch (vfork()) {

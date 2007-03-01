@@ -10,34 +10,18 @@
  */
 
 #include "busybox.h"
-#include <stdio.h>
-#include <stdlib.h>
 #include <errno.h>
 #include <paths.h>
 #include <signal.h>
-#include <stdarg.h>
-#include <string.h>
-#include <termios.h>
-#include <unistd.h>
-#include <limits.h>
-#include <fcntl.h>
 #include <sys/ioctl.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/reboot.h>
 
 #include "init_shared.h"
 
-
-#ifdef CONFIG_SYSLOGD
+#if ENABLE_SYSLOGD
 # include <sys/syslog.h>
 #endif
-
-
-#ifdef CONFIG_SELINUX
-# include <selinux/selinux.h>
-#endif /* CONFIG_SELINUX */
-
 
 #define INIT_BUFFS_SIZE 256
 
@@ -72,12 +56,11 @@ struct serial_struct {
 	int	reserved[1];
 };
 
-
 #ifndef _PATH_STDPATH
 #define _PATH_STDPATH	"/usr/bin:/bin:/usr/sbin:/sbin"
 #endif
 
-#if defined CONFIG_FEATURE_INIT_COREDUMPS
+#if ENABLE_FEATURE_INIT_COREDUMPS
 /*
  * When a file named CORE_ENABLE_FLAG_FILE exists, setrlimit is called
  * before processes are spawned to set core file size as unlimited.
@@ -87,8 +70,6 @@ struct serial_struct {
 #define CORE_ENABLE_FLAG_FILE "/.init_enable_core"
 #include <sys/resource.h>
 #endif
-
-#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))
 
 #define INITTAB      "/etc/inittab"	/* inittab file location */
 #ifndef INIT_SCRIPT
@@ -140,7 +121,7 @@ struct init_action {
 static struct init_action *init_action_list = NULL;
 static char console[CONSOLE_BUFF_SIZE] = CONSOLE_DEV;
 
-#ifndef CONFIG_SYSLOGD
+#if !ENABLE_SYSLOGD
 static char *log_console = VC_5;
 #endif
 #if !ENABLE_DEBUG_INIT
@@ -151,7 +132,7 @@ enum {
 	LOG = 0x1,
 	CONSOLE = 0x2,
 
-#if defined CONFIG_FEATURE_EXTRA_QUIET
+#if ENABLE_FEATURE_EXTRA_QUIET
 	MAYBE_CONSOLE = 0x0,
 #else
 	MAYBE_CONSOLE = CONSOLE,
@@ -181,21 +162,20 @@ static int waitfor(const struct init_action *a, pid_t pid);
 static void shutdown_signal(int sig);
 #endif
 
+#if !ENABLE_DEBUG_INIT
 static void loop_forever(void)
 {
 	while (1)
 		sleep(1);
 }
+#endif
 
 /* Print a message to the specified device.
  * Device may be bitwise-or'd from LOG | CONSOLE */
 #if ENABLE_DEBUG_INIT
 #define messageD message
 #else
-static inline void messageD(int ATTRIBUTE_UNUSED device,
-				const char ATTRIBUTE_UNUSED *fmt, ...)
-{
-}
+#define messageD(...)  do {} while (0)
 #endif
 static void message(int device, const char *fmt, ...)
 	__attribute__ ((format(printf, 2, 3)));
@@ -204,7 +184,7 @@ static void message(int device, const char *fmt, ...)
 	va_list arguments;
 	int l;
 	RESERVE_CONFIG_BUFFER(msg, 1024);
-#ifndef CONFIG_SYSLOGD
+#if !ENABLE_SYSLOGD
 	static int log_fd = -1;
 #endif
 
@@ -213,11 +193,11 @@ static void message(int device, const char *fmt, ...)
 	l = vsnprintf(msg + 1, 1024 - 2, fmt, arguments) + 1;
 		va_end(arguments);
 
-#ifdef CONFIG_SYSLOGD
+#if ENABLE_SYSLOGD
 	/* Log the message to syslogd */
 	if (device & LOG) {
 		/* don`t out "\r\n" */
-		openlog(bb_applet_name, 0, LOG_DAEMON);
+		openlog(applet_name, 0, LOG_DAEMON);
 		syslog(LOG_INFO, "%s", msg + 1);
 		closelog();
 	}
@@ -233,14 +213,14 @@ static void message(int device, const char *fmt, ...)
 	if (log_fd < 0) {
 		if ((log_fd = device_open(log_console, O_RDWR | O_NONBLOCK | O_NOCTTY)) < 0) {
 			log_fd = -2;
-			bb_error_msg("Bummer, can't write to log on %s!", log_console);
+			bb_error_msg("bummer, can't write to log on %s!", log_console);
 			device = CONSOLE;
 		} else {
 			fcntl(log_fd, F_SETFD, FD_CLOEXEC);
 		}
 	}
 	if ((device & LOG) && (log_fd >= 0)) {
-		bb_full_write(log_fd, msg, l);
+		full_write(log_fd, msg, l);
 	}
 #endif
 
@@ -249,12 +229,12 @@ static void message(int device, const char *fmt, ...)
 					O_WRONLY | O_NOCTTY | O_NONBLOCK);
 		/* Always send console messages to /dev/console so people will see them. */
 		if (fd >= 0) {
-			bb_full_write(fd, msg, l);
+			full_write(fd, msg, l);
 			close(fd);
 #if ENABLE_DEBUG_INIT
 		/* all descriptors may be closed */
 		} else {
-			bb_error_msg("Bummer, can't print: ");
+			bb_error_msg("bummer, can't print: ");
 			va_start(arguments, fmt);
 			vfprintf(stderr, fmt, arguments);
 			va_end(arguments);
@@ -312,15 +292,6 @@ static void console_init(void)
 
 	if ((s = getenv("CONSOLE")) != NULL || (s = getenv("console")) != NULL) {
 		safe_strncpy(console, s, sizeof(console));
-#if 0 /* #cpu(sparc) */
-	/* sparc kernel supports console=tty[ab] parameter which is also
-	 * passed to init, so catch it here */
-		/* remap tty[ab] to /dev/ttyS[01] */
-		if (strcmp(s, "ttya") == 0)
-			safe_strncpy(console, SC_0, sizeof(console));
-		else if (strcmp(s, "ttyb") == 0)
-			safe_strncpy(console, SC_1, sizeof(console));
-#endif
 	} else {
 		/* 2.2 kernels: identify the real console backend and try to use it */
 		if (ioctl(0, TIOCGSERIAL, &sr) == 0) {
@@ -344,7 +315,7 @@ static void console_init(void)
 	}
 	if (fd < 0) {
 		/* Perhaps we should panic here? */
-#ifndef CONFIG_SYSLOGD
+#if !ENABLE_SYSLOGD
 		log_console =
 #endif
 		safe_strncpy(console, bb_dev_null, sizeof(console));
@@ -356,7 +327,7 @@ static void console_init(void)
 			 * if TERM is set to linux (the default) */
 			if (s == NULL || strcmp(s, "linux") == 0)
 				putenv("TERM=vt102");
-#ifndef CONFIG_SYSLOGD
+#if !ENABLE_SYSLOGD
 			log_console = console;
 #endif
 		} else {
@@ -541,7 +512,7 @@ static pid_t run(const struct init_action *a)
 				cmd[0][0] = '-';
 				strcpy(cmd[0] + 1, s);
 			}
-#ifdef CONFIG_FEATURE_INIT_SCTTY
+#if ENABLE_FEATURE_INIT_SCTTY
 			/* Establish this process as session leader and
 			 * (attempt) to make the tty (if any) a controlling tty.
 			 */
@@ -564,8 +535,8 @@ static pid_t run(const struct init_action *a)
 			messageD(LOG, "Waiting for enter to start '%s'"
 						"(pid %d, terminal %s)\n",
 					  cmdpath, getpid(), a->terminal);
-			bb_full_write(1, press_enter, sizeof(press_enter) - 1);
-			while(read(0, &c, 1) == 1 && c != '\n')
+			full_write(1, press_enter, sizeof(press_enter) - 1);
+			while (read(0, &c, 1) == 1 && c != '\n')
 				;
 		}
 #endif
@@ -574,7 +545,7 @@ static pid_t run(const struct init_action *a)
 		message(LOG, "Starting pid %d, console %s: '%s'",
 				  getpid(), a->terminal, cmdpath);
 
-#if defined CONFIG_FEATURE_INIT_COREDUMPS
+#if ENABLE_FEATURE_INIT_COREDUMPS
 		{
 			struct stat sb;
 			if (stat(CORE_ENABLE_FLAG_FILE, &sb) == 0) {
@@ -592,7 +563,7 @@ static pid_t run(const struct init_action *a)
 		execv(cmdpath, cmd);
 
 		/* We're still here?  Some error happened. */
-		message(LOG | CONSOLE, "Bummer, could not run '%s': %m", cmdpath);
+		message(LOG | CONSOLE, "Bummer, cannot run '%s': %m", cmdpath);
 		_exit(-1);
 	}
 	sigprocmask(SIG_SETMASK, &omask, NULL);
@@ -653,11 +624,12 @@ static void init_reboot(unsigned long magic)
 	/* We have to fork here, since the kernel calls do_exit(0) in
 	 * linux/kernel/sys.c, which can cause the machine to panic when
 	 * the init process is killed.... */
-	if ((pid = fork()) == 0) {
+	pid = vfork();
+	if (pid == 0) { /* child */
 		reboot(magic);
 		_exit(0);
 	}
-	waitpid (pid, NULL, 0);
+	waitpid(pid, NULL, 0);
 }
 
 static void shutdown_system(void)
@@ -777,7 +749,6 @@ static void shutdown_signal(int sig)
 	sleep(2);
 
 	init_reboot(rb);
-
 	loop_forever();
 }
 
@@ -816,11 +787,7 @@ static void new_init_action(int action, const char *command, const char *cons)
 	if (strcmp(cons, bb_dev_null) == 0 && (action & ASKFIRST))
 		return;
 
-	new_action = calloc((size_t) (1), sizeof(struct init_action));
-	if (!new_action) {
-		message(LOG | CONSOLE, "Memory allocation failure");
-		loop_forever();
-	}
+	new_action = xzalloc(sizeof(struct init_action));
 
 	/* Append to the end of the list */
 	for (a = last = init_action_list; a; a = a->next) {
@@ -842,9 +809,6 @@ static void new_init_action(int action, const char *command, const char *cons)
 	strcpy(new_action->command, command);
 	new_action->action = action;
 	strcpy(new_action->terminal, cons);
-#if 0   /* calloc zeroed always */
-	new_action->pid = 0;
-#endif
 	messageD(LOG|CONSOLE, "command='%s' action='%d' terminal='%s'\n",
 		new_action->command, new_action->action, new_action->terminal);
 }
@@ -875,7 +839,7 @@ static void delete_init_action(struct init_action *action)
  */
 static void parse_inittab(void)
 {
-#ifdef CONFIG_FEATURE_USE_INITTAB
+#if ENABLE_FEATURE_USE_INITTAB
 	FILE *file;
 	char buf[INIT_BUFFS_SIZE], lineAsRead[INIT_BUFFS_SIZE];
 	char tmpConsole[CONSOLE_BUFF_SIZE];
@@ -904,7 +868,7 @@ static void parse_inittab(void)
 		new_init_action(SYSINIT, INIT_SCRIPT, "");
 
 		return;
-#ifdef CONFIG_FEATURE_USE_INITTAB
+#if ENABLE_FEATURE_USE_INITTAB
 	}
 
 	while (fgets(buf, INIT_BUFFS_SIZE, file) != NULL) {
@@ -975,10 +939,10 @@ static void parse_inittab(void)
 	}
 	fclose(file);
 	return;
-#endif							/* CONFIG_FEATURE_USE_INITTAB */
+#endif /* FEATURE_USE_INITTAB */
 }
 
-#ifdef CONFIG_FEATURE_USE_INITTAB
+#if ENABLE_FEATURE_USE_INITTAB
 static void reload_signal(int sig ATTRIBUTE_UNUSED)
 {
 	struct init_action *a, *tmp;
@@ -1003,12 +967,14 @@ static void reload_signal(int sig ATTRIBUTE_UNUSED)
 	run_actions(RESPAWN);
 	return;
 }
-#endif							/* CONFIG_FEATURE_USE_INITTAB */
+#endif  /* FEATURE_USE_INITTAB */
 
 int init_main(int argc, char **argv)
 {
 	struct init_action *a;
 	pid_t wpid;
+
+	die_sleep = 30 * 24*60*60; /* if xmalloc will ever die... */
 
 	if (argc > 1 && !strcmp(argv[1], "-q")) {
 		return kill(1,SIGHUP);
@@ -1016,7 +982,7 @@ int init_main(int argc, char **argv)
 #if !ENABLE_DEBUG_INIT
 	/* Expect to be invoked as init with PID=1 or be invoked as linuxrc */
 	if (getpid() != 1 &&
-		(!ENABLE_FEATURE_INITRD || !strstr(bb_applet_name, "linuxrc")))
+		(!ENABLE_FEATURE_INITRD || !strstr(applet_name, "linuxrc")))
 	{
 		bb_show_usage();
 	}
@@ -1055,9 +1021,12 @@ int init_main(int argc, char **argv)
 	{
 		const char * const *e;
 		/* Make sure environs is set to something sane */
-		for(e = environment; *e; e++)
+		for (e = environment; *e; e++)
 			putenv((char *) *e);
 	}
+
+	if (argc > 1) setenv("RUNLEVEL", argv[1], 1);
+
 	/* Hello world */
 	message(MAYBE_CONSOLE | LOG, "init started:  %s", bb_msg_full_version);
 
@@ -1066,7 +1035,7 @@ int init_main(int argc, char **argv)
 		struct sysinfo info;
 
 		if (!sysinfo(&info) &&
-			(info.mem_unit ? : 1) * (long long)info.totalram < MEGABYTE)
+			(info.mem_unit ? : 1) * (long long)info.totalram < 1024*1024)
 		{
 			message(CONSOLE,"Low memory: forcing swapon.");
 			/* swapon -a requires /proc typically */
@@ -1078,8 +1047,9 @@ int init_main(int argc, char **argv)
 	}
 
 	/* Check if we are supposed to be in single user mode */
-	if (argc > 1 && (!strcmp(argv[1], "single") ||
-					 !strcmp(argv[1], "-s") || !strcmp(argv[1], "1"))) {
+	if (argc > 1
+	 && (!strcmp(argv[1], "single") || !strcmp(argv[1], "-s") || LONE_CHAR(argv[1], '1'))
+	) {
 		/* Start a shell on console */
 		new_init_action(RESPAWN, bb_default_login_shell, "");
 	} else {
@@ -1092,7 +1062,7 @@ int init_main(int argc, char **argv)
 		parse_inittab();
 	}
 
-#ifdef CONFIG_SELINUX
+#if ENABLE_SELINUX
 	if (getenv("SELINUX_INIT") == NULL) {
 		int enforce = 0;
 
@@ -1122,12 +1092,12 @@ int init_main(int argc, char **argv)
 	/* Next run anything to be run only once */
 	run_actions(ONCE);
 
-#ifdef CONFIG_FEATURE_USE_INITTAB
+#if ENABLE_FEATURE_USE_INITTAB
 	/* Redefine SIGHUP to reread /etc/inittab */
 	signal(SIGHUP, reload_signal);
 #else
 	signal(SIGHUP, SIG_IGN);
-#endif /* CONFIG_FEATURE_USE_INITTAB */
+#endif /* FEATURE_USE_INITTAB */
 
 
 	/* Now run the looping stuff for the rest of forever */
@@ -1156,7 +1126,7 @@ int init_main(int argc, char **argv)
 				}
 			}
 			/* see if anyone else is waiting to be reaped */
-			wpid = waitpid (-1, NULL, WNOHANG);
+			wpid = waitpid(-1, NULL, WNOHANG);
 		}
 	}
 }
