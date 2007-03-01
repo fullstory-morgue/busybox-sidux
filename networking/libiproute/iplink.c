@@ -1,7 +1,8 @@
+/* vi: set sw=4 ts=4: */
 /*
- * iplink.c		"ip link".
+ * iplink.c "ip link".
  *
- * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
+ * Authors: Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
@@ -10,10 +11,6 @@
 
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-
-#include <errno.h>
-#include <string.h>
-#include <unistd.h>
 
 #include <net/if.h>
 #include <net/if_packet.h>
@@ -28,11 +25,9 @@
 /* take from linux/sockios.h */
 #define SIOCSIFNAME	0x8923		/* set interface name */
 
-static int do_link;
-
 static int on_off(char *msg)
 {
-	bb_error_msg("Error: argument of \"%s\" must be \"on\" or \"off\"", msg);
+	bb_error_msg("error: argument of \"%s\" must be \"on\" or \"off\"", msg);
 	return -1;
 }
 
@@ -52,23 +47,23 @@ static int get_ctl_fd(void)
 	if (fd >= 0)
 		return fd;
 	errno = s_errno;
-	perror("Cannot create control socket");
+	bb_perror_msg("cannot create control socket");
 	return -1;
 }
 
-static int do_chflags(char *dev, __u32 flags, __u32 mask)
+static int do_chflags(char *dev, uint32_t flags, uint32_t mask)
 {
 	struct ifreq ifr;
 	int fd;
 	int err;
 
-	strcpy(ifr.ifr_name, dev);
+	strncpy(ifr.ifr_name, dev, sizeof(ifr.ifr_name));
 	fd = get_ctl_fd();
 	if (fd < 0)
 		return -1;
 	err = ioctl(fd, SIOCGIFFLAGS, &ifr);
 	if (err) {
-		perror("SIOCGIFFLAGS");
+		bb_perror_msg("SIOCGIFFLAGS");
 		close(fd);
 		return -1;
 	}
@@ -77,7 +72,7 @@ static int do_chflags(char *dev, __u32 flags, __u32 mask)
 		ifr.ifr_flags |= mask&flags;
 		err = ioctl(fd, SIOCSIFFLAGS, &ifr);
 		if (err)
-			perror("SIOCSIFFLAGS");
+			bb_perror_msg("SIOCSIFFLAGS");
 	}
 	close(fd);
 	return err;
@@ -89,14 +84,14 @@ static int do_changename(char *dev, char *newdev)
 	int fd;
 	int err;
 
-	strcpy(ifr.ifr_name, dev);
-	strcpy(ifr.ifr_newname, newdev);
+	strncpy(ifr.ifr_name, dev, sizeof(ifr.ifr_name));
+	strncpy(ifr.ifr_newname, newdev, sizeof(ifr.ifr_newname));
 	fd = get_ctl_fd();
 	if (fd < 0)
 		return -1;
 	err = ioctl(fd, SIOCSIFNAME, &ifr);
 	if (err) {
-		perror("SIOCSIFNAME");
+		bb_perror_msg("SIOCSIFNAME");
 		close(fd);
 		return -1;
 	}
@@ -114,10 +109,10 @@ static int set_qlen(char *dev, int qlen)
 		return -1;
 
 	memset(&ifr, 0, sizeof(ifr));
-	strcpy(ifr.ifr_name, dev);
+	strncpy(ifr.ifr_name, dev, sizeof(ifr.ifr_name));
 	ifr.ifr_qlen = qlen;
 	if (ioctl(s, SIOCSIFTXQLEN, &ifr) < 0) {
-		perror("SIOCSIFXQLEN");
+		bb_perror_msg("SIOCSIFXQLEN");
 		close(s);
 		return -1;
 	}
@@ -136,10 +131,10 @@ static int set_mtu(char *dev, int mtu)
 		return -1;
 
 	memset(&ifr, 0, sizeof(ifr));
-	strcpy(ifr.ifr_name, dev);
+	strncpy(ifr.ifr_name, dev, sizeof(ifr.ifr_name));
 	ifr.ifr_mtu = mtu;
 	if (ioctl(s, SIOCSIFMTU, &ifr) < 0) {
-		perror("SIOCSIFMTU");
+		bb_perror_msg("SIOCSIFMTU");
 		close(s);
 		return -1;
 	}
@@ -157,14 +152,14 @@ static int get_address(char *dev, int *htype)
 
 	s = socket(PF_PACKET, SOCK_DGRAM, 0);
 	if (s < 0) {
-		perror("socket(PF_PACKET)");
+		bb_perror_msg("socket(PF_PACKET)");
 		return -1;
 	}
 
 	memset(&ifr, 0, sizeof(ifr));
-	strcpy(ifr.ifr_name, dev);
+	strncpy(ifr.ifr_name, dev, sizeof(ifr.ifr_name));
 	if (ioctl(s, SIOCGIFINDEX, &ifr) < 0) {
-		perror("SIOCGIFINDEX");
+		bb_perror_msg("SIOCGIFINDEX");
 		close(s);
 		return -1;
 	}
@@ -174,14 +169,14 @@ static int get_address(char *dev, int *htype)
 	me.sll_ifindex = ifr.ifr_ifindex;
 	me.sll_protocol = htons(ETH_P_LOOP);
 	if (bind(s, (struct sockaddr*)&me, sizeof(me)) == -1) {
-		perror("bind");
+		bb_perror_msg("bind");
 		close(s);
 		return -1;
 	}
 
 	alen = sizeof(me);
 	if (getsockname(s, (struct sockaddr*)&me, &alen) == -1) {
-		perror("getsockname");
+		bb_perror_msg("getsockname");
 		close(s);
 		return -1;
 	}
@@ -195,13 +190,13 @@ static int parse_address(char *dev, int hatype, int halen, char *lla, struct ifr
 	int alen;
 
 	memset(ifr, 0, sizeof(*ifr));
-	strcpy(ifr->ifr_name, dev);
+	strncpy(ifr->ifr_name, dev, sizeof(ifr->ifr_name));
 	ifr->ifr_hwaddr.sa_family = hatype;
 	alen = ll_addr_a2n((unsigned char *)(ifr->ifr_hwaddr.sa_data), 14, lla);
 	if (alen < 0)
 		return -1;
 	if (alen != halen) {
-		bb_error_msg("Wrong address (%s) length: expected %d bytes", lla, halen);
+		bb_error_msg("wrong address (%s) length: expected %d bytes", lla, halen);
 		return -1;
 	}
 	return 0;
@@ -215,7 +210,7 @@ static int set_address(struct ifreq *ifr, int brd)
 	if (s < 0)
 		return -1;
 	if (ioctl(s, brd?SIOCSIFHWBROADCAST:SIOCSIFHWADDR, ifr) < 0) {
-		perror(brd?"SIOCSIFHWBROADCAST":"SIOCSIFHWADDR");
+		bb_perror_msg(brd ? "SIOCSIFHWBROADCAST" : "SIOCSIFHWADDR");
 		close(s);
 		return -1;
 	}
@@ -227,8 +222,8 @@ static int set_address(struct ifreq *ifr, int brd)
 static int do_set(int argc, char **argv)
 {
 	char *dev = NULL;
-	__u32 mask = 0;
-	__u32 flags = 0;
+	uint32_t mask = 0;
+	uint32_t flags = 0;
 	int qlen = -1;
 	int mtu = -1;
 	char *newaddr = NULL;
@@ -335,7 +330,6 @@ static int do_set(int argc, char **argv)
 static int ipaddr_list_link(int argc, char **argv)
 {
 	preferred_family = AF_PACKET;
-	do_link = 1;
 	return ipaddr_list_or_flush(argc, argv, 0);
 }
 
@@ -351,6 +345,6 @@ int do_iplink(int argc, char **argv)
 	} else
 		return ipaddr_list_link(0, NULL);
 
-	bb_error_msg("Command \"%s\" is unknown.", *argv);
+	bb_error_msg("command \"%s\" is unknown", *argv);
 	exit(-1);
 }

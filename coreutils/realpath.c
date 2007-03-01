@@ -5,13 +5,11 @@
 /* Mar 16, 2003      Manuel Novoa III   (mjn3@codepoet.org)
  *
  * Now does proper error checking on output and returns a failure exit code
- * if one or more paths can not be resolved.
+ * if one or more paths cannot be resolved.
  *
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include <limits.h>
-#include <stdlib.h>
 #include "busybox.h"
 
 int realpath_main(int argc, char **argv)
@@ -44,5 +42,5 @@ int realpath_main(int argc, char **argv)
 	RELEASE_CONFIG_BUFFER(resolved_path);
 #endif
 
-	bb_fflush_stdout_and_exit(retval);
+	fflush_stdout_and_exit(retval);
 }

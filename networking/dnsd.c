@@ -17,22 +17,17 @@
  * the first porting of oao' scdns to busybox also.
  */
 
-#include <unistd.h>
-#include <string.h>
-#include <signal.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <ctype.h>
 #include "busybox.h"
 
-static char *fileconf = "/etc/dnsd.conf";
+static const char *fileconf = "/etc/dnsd.conf";
 #define LOCK_FILE       "/var/run/dnsd.lock"
-#define LOG_FILE        "/var/log/dnsd.log"
 
-#define is_daemon()  (flags&16)
-#define is_verbose() (flags&32)
-//#define DEBUG 
+// Must match getopt32 call
+#define OPT_daemon  (option_mask32 & 0x10)
+#define OPT_verbose (option_mask32 & 0x20)
 
+//#define DEBUG 1
+#define DEBUG 0
 
 enum {
 	MAX_HOST_LEN = 16,      // longest host name allowed is 15
@@ -81,7 +76,6 @@ struct dns_entry {		// element of known name, ip address and reversed ip address
 };
 
 static struct dns_entry *dnsentry = NULL;
-static int daemonmode = 0;
 static uint32_t ttl = DEFAULT_TTL;
 
 /*
@@ -90,7 +84,7 @@ static uint32_t ttl = DEFAULT_TTL;
 static void convname(char *a, uint8_t *q)
 {
 	int i = (q[0] == '.') ? 0 : 1;
-	for(; i < MAX_HOST_LEN-1 && *q; i++, q++)
+	for (; i < MAX_HOST_LEN-1 && *q; i++, q++)
 		a[i] = tolower(*q);
 	a[0] = i - 1;
 	a[i] = 0;
@@ -102,28 +96,14 @@ static void convname(char *a, uint8_t *q)
 static void undot(uint8_t * rip)
 {
 	int i = 0, s = 0;
-	while(rip[i]) i++;
-	for(--i; i >= 0; i--) {
-		if(rip[i] == '.') {
+	while (rip[i])
+		i++;
+	for (--i; i >= 0; i--) {
+		if (rip[i] == '.') {
 			rip[i] = s;
 			s = 0;
 		} else s++;
 	}
-}
-
-/*
- * Append message to log file
- */
-static void log_message(char *filename, char *message)
-{
-	FILE *logfile;
-	if (!daemonmode)
-		return;
-	logfile = fopen(filename, "a");
-	if (!logfile)
-		return;
-	fprintf(logfile, "%s\n", message);
-	fclose(logfile);
 }
 
 /*
@@ -135,53 +115,54 @@ static void log_message(char *filename, char *message)
  * converting to a length/string substring for that label.
  */
 
-static int getfileentry(FILE * fp, struct dns_entry *s, int verb)
+static int getfileentry(FILE * fp, struct dns_entry *s)
 {
 	unsigned int a,b,c,d;
 	char *r, *name;
 
-restart:
-	if(!(r = bb_get_line_from_file(fp)))
+ restart:
+	r = xmalloc_fgets(fp);
+	if (!r)
 		return -1;
-	while(*r == ' ' || *r == '\t') {
+	while (*r == ' ' || *r == '\t') {
 		r++;
-		if(!*r || *r == '#' || *r == '\n')
+		if (!*r || *r == '#' || *r == '\n')
 			goto restart; /* skipping empty/blank and commented lines  */
 	}
 	name = r;
-	while(*r != ' ' && *r != '\t')
+	while (*r != ' ' && *r != '\t')
 		r++;
 	*r++ = 0;
-	if(sscanf(r,"%u.%u.%u.%u",&a,&b,&c,&d) != 4)
-			goto restart; /* skipping wrong lines */
+	if (sscanf(r, "%u.%u.%u.%u", &a, &b, &c, &d) != 4)
+		goto restart; /* skipping wrong lines */
 
-	sprintf(s->ip,"%u.%u.%u.%u",a,b,c,d);
-	sprintf(s->rip,".%u.%u.%u.%u",d,c,b,a);
+	sprintf(s->ip, "%u.%u.%u.%u", a, b, c, d);
+	sprintf(s->rip, ".%u.%u.%u.%u", d, c, b, a);
 	undot((uint8_t*)s->rip);
 	convname(s->name,(uint8_t*)name);
 
-	if(verb)
-		fprintf(stderr,"\tname:%s, ip:%s\n",&(s->name[1]),s->ip);
+	if (OPT_verbose)
+		fprintf(stderr, "\tname:%s, ip:%s\n", &(s->name[1]),s->ip);
 
-	return 0; /* warningkiller */
+	return 0;
 }
 
 /*
  * Read hostname/IP records from file
  */
-static void dnsentryinit(int verb)
+static void dnsentryinit(void)
 {
 	FILE *fp;
 	struct dns_entry *m, *prev;
 	prev = dnsentry = NULL;
 
-	fp = bb_xfopen(fileconf, "r");
+	fp = xfopen(fileconf, "r");
 
 	while (1) {
 		m = xmalloc(sizeof(struct dns_entry));
 
 		m->next = NULL;
-		if (getfileentry(fp, m, verb))
+		if (getfileentry(fp, m))
 			break;
 
 		if (prev == NULL)
@@ -193,34 +174,6 @@ static void dnsentryinit(int verb)
 	fclose(fp);
 }
 
-
-/*
- * Set up UDP socket
- */
-static int listen_socket(char *iface_addr, int listen_port)
-{
-	struct sockaddr_in a;
-	char msg[100];
-	int s;
-	int yes = 1;
-	s = bb_xsocket(PF_INET, SOCK_DGRAM, 0);
-#ifdef SO_REUSEADDR
-	if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(yes)) < 0)
-		bb_perror_msg_and_die("setsockopt() failed");
-#endif
-	memset(&a, 0, sizeof(a));
-	a.sin_port = htons(listen_port);
-	a.sin_family = AF_INET;
-	if (!inet_aton(iface_addr, &a.sin_addr))
-		bb_perror_msg_and_die("bad iface address");
-	bb_xbind(s, (struct sockaddr *)&a, sizeof(a));
-	listen(s, 50); /* bb_xlisten? */
-	sprintf(msg, "accepting UDP packets on addr:port %s:%d\n",
-		iface_addr, (int)listen_port);
-	log_message(LOG_FILE, msg);
-	return s;
-}
-
 /*
  * Look query up in dns records and return answer if found
  * qs is the query string, first byte the string length
@@ -228,41 +181,40 @@ static int listen_socket(char *iface_addr, int listen_port)
 static int table_lookup(uint16_t type, uint8_t * as, uint8_t * qs)
 {
 	int i;
-	struct dns_entry *d = dnsentry;
+	struct dns_entry *d=dnsentry;
 
-	if(d) do {
-#ifdef DEBUG
-		if(qs && d) {
-			char *p,*q;
-			q = (char *)&(qs[1]);
-			p = &(d->name[1]);
-			fprintf(stderr, "\n%s: %d/%d p:%s q:%s %d", 
-				__FUNCTION__, strlen(p), (int)(d->name[0]), 
-				p, q, strlen(q));
-		}
+	do {
+#if DEBUG
+		char *p,*q;
+		q = (char *)&(qs[1]);
+		p = &(d->name[1]);
+		fprintf(stderr, "\n%s: %d/%d p:%s q:%s %d",
+			__FUNCTION__, (int)strlen(p), (int)(d->name[0]),
+			p, q, (int)strlen(q));
 #endif
-		if (type == REQ_A) { 			/* search by host name */
-			for(i = 1; i <= (int)(d->name[0]); i++)
-				if(tolower(qs[i]) != d->name[i])
+		if (type == REQ_A) { /* search by host name */
+			for (i = 1; i <= (int)(d->name[0]); i++)
+				if (tolower(qs[i]) != d->name[i])
 					break;
-			if(i > (int)(d->name[0])) {
-#ifdef DEBUG
+			if (i > (int)(d->name[0])) {
+#if DEBUG
 				fprintf(stderr, " OK");
 #endif
 				strcpy((char *)as, d->ip);
-#ifdef DEBUG
+#if DEBUG
 				fprintf(stderr, " as:%s\n", as);
 #endif
-				return 0;
+					return 0;
 			}
-		} else 
-		if (type == REQ_PTR) { 			/* search by IP-address */
+		} else
+		if (type == REQ_PTR) { /* search by IP-address */
 			if (!strncmp((char*)&d->rip[1], (char*)&qs[1], strlen(d->rip)-1)) {
 				strcpy((char *)as, d->name);
 				return 0;
 			}
 		}
-	} while ((d = d->next) != NULL);
+		d = d->next;
+	} while (d);
 	return -1;
 }
 
@@ -270,7 +222,7 @@ static int table_lookup(uint16_t type, uint8_t * as, uint8_t * qs)
 /*
  * Decode message and generate answer
  */
-#define eret(s) do { fprintf (stderr, "%s\n", s); return -1; } while (0)
+#define eret(s) do { fputs(s, stderr); return -1; } while (0)
 static int process_packet(uint8_t * buf)
 {
 	struct dns_head *head;
@@ -286,10 +238,10 @@ static int process_packet(uint8_t * buf)
 
 	head = (struct dns_head *)buf;
 	if (head->nquer == 0)
-		eret("no queries");
+		eret("no queries\n");
 
-	if ((head->flags & 0x8000))
-		eret("ignoring response packet");
+	if (head->flags & 0x8000)
+		eret("ignoring response packet\n");
 
 	from = (void *)&head[1];	//  start of query string
 	next = answb = from + strlen((char *)from) + 1 + sizeof(struct dns_prop);   // where to append answer block
@@ -316,7 +268,7 @@ static int process_packet(uint8_t * buf)
 		goto empty_packet;
 
 	// We have a standard query
-	log_message(LOG_FILE, (char *)from);
+	bb_info_msg("%s", (char *)from);
 	lookup_result = table_lookup(type, answstr, (uint8_t*)from);
 	if (lookup_result != 0) {
 		outr.flags = 3 | 0x0400;	//name do not exist and auth
@@ -351,7 +303,8 @@ static int process_packet(uint8_t * buf)
 	memcpy(next, (void *)answstr, outr.rlen);
 	next += outr.rlen;
 
-empty_packet:
+ empty_packet:
+
 	flags = ntohs(head->flags);
 	// clear rcode and RA, set responsebit and our new flags
 	flags |= (outr.flags & 0xff80) | 0x8000;
@@ -369,44 +322,45 @@ empty_packet:
 static void interrupt(int x)
 {
 	unlink(LOCK_FILE);
-	write(2, "interrupt exiting\n", 18);
+	bb_error_msg("interrupt, exiting\n");
 	exit(2);
 }
 
-
 int dnsd_main(int argc, char **argv)
 {
+	char *listen_interface = NULL;
+	char *sttl, *sport;
+	len_and_sockaddr *lsa;
 	int udps;
 	uint16_t port = 53;
 	uint8_t buf[MAX_PACK_LEN];
-	unsigned long flags = 0;
-	char *listen_interface = "0.0.0.0";
-	char *sttl=NULL, *sport=NULL;
 
-	if(argc > 1)
-		flags = bb_getopt_ulflags(argc, argv, "i:c:t:p:dv", &listen_interface, &fileconf, &sttl, &sport);
-	if(sttl)
-		if(!(ttl = atol(sttl)))
-			bb_show_usage();
-	if(sport)
-		if(!(port = atol(sport)))
-			bb_show_usage();
+	getopt32(argc, argv, "i:c:t:p:dv", &listen_interface, &fileconf, &sttl, &sport);
+	//if (option_mask32 & 0x1) // -i
+	//if (option_mask32 & 0x2) // -c
+	if (option_mask32 & 0x4) // -t
+		ttl = xatou_range(sttl, 1, 0xffffffff);
+	if (option_mask32 & 0x8) // -p
+		port = xatou_range(sttl, 1, 0xffff);
 
-	if(is_verbose()) {
-		fprintf(stderr,"listen_interface: %s\n", listen_interface);
-		fprintf(stderr,"ttl: %d, port: %d\n", ttl, port);
-		fprintf(stderr,"fileconf: %s\n", fileconf);
+	if (OPT_verbose) {
+		bb_info_msg("listen_interface: %s", listen_interface);
+		bb_info_msg("ttl: %d, port: %d", ttl, port);
+		bb_info_msg("fileconf: %s", fileconf);
 	}
 
-	if(is_daemon())
+	if (OPT_daemon) {
+//FIXME: NOMMU will NOT set LOGMODE_SYSLOG!
 #ifdef BB_NOMMU
 		/* reexec for vfork() do continue parent */
 		vfork_daemon_rexec(1, 0, argc, argv, "-d");
 #else
-		bb_xdaemon(1, 0);
+		xdaemon(1, 0);
 #endif
+		logmode = LOGMODE_SYSLOG;
+	}
 
-	dnsentryinit(is_verbose());
+	dnsentryinit();
 
 	signal(SIGINT, interrupt);
 	signal(SIGPIPE, SIG_IGN);
@@ -418,9 +372,12 @@ int dnsd_main(int argc, char **argv)
 	signal(SIGURG, SIG_IGN);
 #endif
 
-	udps = listen_socket(listen_interface, port);
-	if (udps < 0)
-		exit(1);
+	lsa = host2sockaddr(listen_interface, port);
+	udps = xsocket(lsa->sa.sa_family, SOCK_DGRAM, 0);
+	xbind(udps, &lsa->sa, lsa->len);
+	// xlisten(udps, 50); - ?!! DGRAM sockets are never listened on I think?
+	bb_info_msg("Accepting UDP packets on %s",
+			xmalloc_sockaddr2dotted(&lsa->sa, lsa->len));
 
 	while (1) {
 		fd_set fdset;
@@ -429,37 +386,36 @@ int dnsd_main(int argc, char **argv)
 		FD_ZERO(&fdset);
 		FD_SET(udps, &fdset);
 		// Block until a message arrives
-		if((r = select(udps + 1, &fdset, NULL, NULL, NULL)) < 0)
+// FIXME: Fantastic. select'ing on just one fd??
+// Why no just block on it doing recvfrom() ?
+		r = select(udps + 1, &fdset, NULL, NULL, NULL);
+		if (r < 0)
 			bb_perror_msg_and_die("select error");
-		else
-		if(r == 0)
+		if (r == 0)
 			bb_perror_msg_and_die("select spurious return");
 
-		/* Can this test ever be false? */
+		/* Can this test ever be false? - yes */
 		if (FD_ISSET(udps, &fdset)) {
-			struct sockaddr_in from;
-			int fromlen = sizeof(from);
-			r = recvfrom(udps, buf, sizeof(buf), 0,
-				     (struct sockaddr *)&from,
-				     (void *)&fromlen);
-			if(is_verbose())
-				fprintf(stderr, "\n--- Got UDP size=%d ", r);
-			log_message(LOG_FILE, "\n--- Got UDP ");
+			socklen_t fromlen = lsa->len;
+// FIXME: need to get *DEST* address (to which of our addresses
+// this query was directed), and reply from the same address.
+// Or else we can exhibit usual UDP ugliness:
+// [ip1.multihomed.ip2] <=  query to ip1  <= peer
+// [ip1.multihomed.ip2] => reply from ip2 => peer (confused)
+			r = recvfrom(udps, buf, sizeof(buf), 0, &lsa->sa, &fromlen);
+			if (OPT_verbose)
+				bb_info_msg("Got UDP packet");
 
 			if (r < 12 || r > 512) {
 				bb_error_msg("invalid packet size");
 				continue;
 			}
-			if (r > 0) {
-				r = process_packet(buf);
-				if (r > 0)
-					sendto(udps, buf,
-					       r, 0, (struct sockaddr *)&from,
-					       fromlen);
-			}
-		}		// end if
-	}			// end while
-	return 0;
+			if (r <= 0)
+				continue;
+			r = process_packet(buf);
+			if (r <= 0)
+				continue;
+			sendto(udps, buf, r, 0, &lsa->sa, fromlen);
+		}
+	}
 }
-
-

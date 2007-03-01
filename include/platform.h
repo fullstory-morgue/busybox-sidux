@@ -11,7 +11,7 @@
 #undef __GNUC_PREREQ
 #if defined __GNUC__ && defined __GNUC_MINOR__
 # define __GNUC_PREREQ(maj, min) \
-	        ((__GNUC__ << 16) + __GNUC_MINOR__ >= ((maj) << 16) + (min))
+		((__GNUC__ << 16) + __GNUC_MINOR__ >= ((maj) << 16) + (min))
 #else
 # define __GNUC_PREREQ(maj, min) 0
 #endif
@@ -34,7 +34,7 @@
 #endif
 
 #undef inline
-#if __STDC_VERSION__ > 199901L
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ > 199901L
 /* it's a keyword */
 #else
 # if __GNUC_PREREQ (2,7)
@@ -133,13 +133,6 @@ typedef int socklen_t;
 #endif
 
 /* ---- Compiler dependent settings ------------------------- */
-#ifndef __GNUC__
-#if defined __INTEL_COMPILER
-__extension__ typedef __signed__ long long __s64;
-__extension__ typedef unsigned long long __u64;
-#endif /* __INTEL_COMPILER */
-#endif /* ifndef __GNUC__ */
-
 #if (defined __digital__ && defined __unix__)
 # undef HAVE_MNTENT_H
 #else
@@ -179,7 +172,18 @@ typedef unsigned long long int  uintmax_t;
 #endif
 #endif
 
-/* uclibc does not implement daemon for no-mmu systems.
+/* Size-saving "small" ints (arch-dependent) */
+#if defined(i386) || defined(__x86_64__) || defined(__mips__) || defined(__cris__)
+/* add other arches which benefit from this... */
+typedef signed char smallint;
+typedef unsigned char smalluint;
+#else
+/* for arches where byte accesses generate larger code: */
+typedef int smallint;
+typedef unsigned smalluint;
+#endif
+
+/* uclibc does not implement daemon() for no-mmu systems.
  * For 0.9.29 and svn, __ARCH_USE_MMU__ indicates no-mmu reliably.
  * For earlier versions there is no reliable way to check if we are building
  * for a mmu-less system; the user should pass EXTRA_CFLAGS="-DBB_NOMMU"
@@ -193,7 +197,25 @@ typedef unsigned long long int  uintmax_t;
 /* Platforms that haven't got dprintf need to implement fdprintf() in
  * libbb.  This would require a platform.c.  It's not going to be cleaned
  * out of the tree, so stop saying it should be. */
+#if !defined(__dietlibc__)
+/* Needed for: glibc */
+/* Not needed for: dietlibc */
+/* Others: ?? (add as needed) */
 #define fdprintf dprintf
+#endif
+
+#if defined(__dietlibc__)
+static ATTRIBUTE_ALWAYS_INLINE char* strchrnul(const char *s, char c) {
+	while (*s && *s != c) ++s;
+	return (char*)s;
+}
+#endif
+
+/* Don't use lchown with glibc older than 2.1.x ... uC-libc lacks it */
+#if (defined __GLIBC__ && __GLIBC__ <= 2 && __GLIBC_MINOR__ < 1) || \
+    defined __UC_LIBC__
+# define lchown chown
+#endif
 
 /* THIS SHOULD BE CLEANED OUT OF THE TREE ENTIRELY */
 /* FIXME: fix tar.c! */
@@ -209,7 +231,7 @@ typedef unsigned long long int  uintmax_t;
 #define PRIu32 "u"
 
 /* use legacy setpgrp(pidt_,pid_t) for now.  move to platform.c */
-#define bb_setpgrp do{pid_t __me = getpid();setpgrp(__me,__me);}while(0)
+#define bb_setpgrp do { pid_t __me = getpid(); setpgrp(__me,__me); } while (0)
 
 #if !defined ADJ_OFFSET_SINGLESHOT && defined MOD_CLKA && defined MOD_OFFSET
 #define ADJ_OFFSET_SINGLESHOT (MOD_CLKA | MOD_OFFSET)
@@ -230,6 +252,35 @@ typedef unsigned long long int  uintmax_t;
 
 #if defined(__linux__)
 #include <sys/mount.h>
+// Make sure we have all the new mount flags we actually try to use.
+#ifndef MS_BIND
+#define MS_BIND        (1<<12)
+#endif
+#ifndef MS_MOVE
+#define MS_MOVE        (1<<13)
+#endif
+#ifndef MS_RECURSIVE
+#define MS_RECURSIVE   (1<<14)
+#endif
+#ifndef MS_SILENT
+#define MS_SILENT      (1<<15)
+#endif
+
+// The shared subtree stuff, which went in around 2.6.15
+#ifndef MS_UNBINDABLE
+#define MS_UNBINDABLE  (1<<17)
+#endif
+#ifndef MS_PRIVATE
+#define MS_PRIVATE     (1<<18)
+#endif
+#ifndef MS_SLAVE
+#define MS_SLAVE       (1<<19)
+#endif
+#ifndef MS_SHARED
+#define MS_SHARED      (1<<20)
+#endif
+
+
 #if !defined(BLKSSZGET)
 #define BLKSSZGET _IO(0x12, 104)
 #endif

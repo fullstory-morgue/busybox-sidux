@@ -1,3 +1,4 @@
+/* vi: set sw=4 ts=4: */
 /*
  * lsattr.c		- List file attributes on an ext2 file system
  *
@@ -17,36 +18,16 @@
  * 98/12/29	- Display version info only when -V specified (G M Sipe)
  */
 
-#include <sys/types.h>
-#include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <getopt.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/param.h>
-#include <sys/stat.h>
+#include "busybox.h"
+#include "e2fs_lib.h"
 
-#include "ext2fs/ext2_fs.h"
-#include "e2fsbb.h"
-#include "e2p/e2p.h"
-
-#define OPT_RECUR 1
-#define OPT_ALL 2
-#define OPT_DIRS_OPT 4
-#define OPT_PF_LONG 8
-#define OPT_GENERATION 16
-static int flags;
-
-#ifdef CONFIG_LFS
-# define LSTAT lstat64
-# define STRUCT_STAT struct stat64
-#else
-# define LSTAT lstat
-# define STRUCT_STAT struct stat
-#endif
+enum {
+	OPT_RECUR      = 0x1,
+	OPT_ALL        = 0x2,
+	OPT_DIRS_OPT   = 0x4,
+	OPT_PF_LONG    = 0x8,
+	OPT_GENERATION = 0x10,
+};
 
 static void list_attributes(const char *name)
 {
@@ -55,62 +36,47 @@ static void list_attributes(const char *name)
 
 	if (fgetflags(name, &fsflags) == -1)
 		goto read_err;
-	if (flags & OPT_GENERATION) {
+
+	if (option_mask32 & OPT_GENERATION) {
 		if (fgetversion(name, &generation) == -1)
 			goto read_err;
 		printf("%5lu ", generation);
 	}
 
-	if (flags & OPT_PF_LONG) {
+	if (option_mask32 & OPT_PF_LONG) {
 		printf("%-28s ", name);
 		print_flags(stdout, fsflags, PFOPT_LONG);
-		printf("\n");
+		puts("");
 	} else {
 		print_flags(stdout, fsflags, 0);
 		printf(" %s\n", name);
 	}
 
 	return;
-read_err:
+ read_err:
 	bb_perror_msg("reading %s", name);
-}
-
-static int lsattr_dir_proc(const char *, struct dirent *, void *);
-
-static void lsattr_args(const char *name)
-{
-	STRUCT_STAT	st;
-
-	if (LSTAT(name, &st) == -1) {
-		bb_perror_msg("stating %s", name);
-	} else {
-		if (S_ISDIR(st.st_mode) && !(flags & OPT_DIRS_OPT))
-			iterate_on_dir(name, lsattr_dir_proc, NULL);
-		else
-			list_attributes(name);
-	}
 }
 
 static int lsattr_dir_proc(const char *dir_name, struct dirent *de,
 			   void *private)
 {
-	STRUCT_STAT	st;
+	struct stat st;
 	char *path;
 
 	path = concat_path_file(dir_name, de->d_name);
 
-	if (LSTAT(path, &st) == -1)
-		bb_perror_msg(path);
-	else {
-		if (de->d_name[0] != '.' || (flags & OPT_ALL)) {
-			list_attributes(path);
-			if (S_ISDIR(st.st_mode) && (flags & OPT_RECUR) &&
-			   (de->d_name[0] != '.' && (de->d_name[1] != '\0' ||
-			   (de->d_name[1] != '.' && de->d_name[2] != '\0')))) {
-				printf("\n%s:\n", path);
-				iterate_on_dir(path, lsattr_dir_proc, NULL);
-				printf("\n");
-			}
+	if (lstat(path, &st) == -1)
+		bb_perror_msg("stat %s", path);
+
+	else if (de->d_name[0] != '.' || (option_mask32 & OPT_ALL)) {
+		list_attributes(path);
+		if (S_ISDIR(st.st_mode) && (option_mask32 & OPT_RECUR)
+		 && (de->d_name[0] != '.'
+		     || (de->d_name[1] != '\0' && NOT_LONE_CHAR(de->d_name+1, '.')))
+		) {
+			printf("\n%s:\n", path);
+			iterate_on_dir(path, lsattr_dir_proc, NULL);
+			puts("");
 		}
 	}
 
@@ -119,17 +85,30 @@ static int lsattr_dir_proc(const char *dir_name, struct dirent *de,
 	return 0;
 }
 
+static void lsattr_args(const char *name)
+{
+	struct stat st;
+
+	if (lstat(name, &st) == -1) {
+		bb_perror_msg("stat %s", name);
+	} else if (S_ISDIR(st.st_mode) && !(option_mask32 & OPT_DIRS_OPT)) {
+		iterate_on_dir(name, lsattr_dir_proc, NULL);
+	} else {
+		list_attributes(name);
+	}
+}
+
 int lsattr_main(int argc, char **argv)
 {
-	int i;
+	getopt32(argc, argv, "Radlv");
+	argv += optind;
 
-	flags = bb_getopt_ulflags(argc, argv, "Radlv");
-
-	if (optind > argc - 1)
+	if (!*argv)
 		lsattr_args(".");
-	else
-		for (i = optind; i < argc; i++)
-			lsattr_args(argv[i]);
+	else {
+		while (*argv)
+			lsattr_args(*argv++);
+	}
 
 	return EXIT_SUCCESS;
 }

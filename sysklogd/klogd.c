@@ -18,13 +18,6 @@
  */
 
 #include "busybox.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <signal.h>		/* for our signal() handlers */
-#include <string.h>		/* strncpy() */
-#include <errno.h>		/* errno and friends */
-#include <unistd.h>
-#include <ctype.h>
 #include <sys/syslog.h>
 #include <sys/klog.h>
 
@@ -32,8 +25,7 @@ static void klogd_signal(int sig ATTRIBUTE_UNUSED)
 {
 	klogctl(7, NULL, 0);
 	klogctl(0, 0, 0);
-	/* logMessage(0, "Kernel log daemon exiting."); */
-	syslog(LOG_NOTICE, "Kernel log daemon exiting.");
+	syslog(LOG_NOTICE, "Kernel log daemon exiting");
 	exit(EXIT_SUCCESS);
 }
 
@@ -45,30 +37,23 @@ static void klogd_signal(int sig ATTRIBUTE_UNUSED)
 int klogd_main(int argc, char **argv)
 {
 	RESERVE_CONFIG_BUFFER(log_buffer, KLOGD_LOGBUF_SIZE);
-	int console_log_level = -1;
-	int priority = LOG_INFO;
-	int i, n, lastc;
+	int i = i; /* silence gcc */
 	char *start;
 
+	/* do normal option parsing */
+	getopt32(argc, argv, "c:n", &start);
 
-	{
-		unsigned long opt;
+	if (option_mask32 & OPT_LEVEL) {
+		/* Valid levels are between 1 and 8 */
+		i = xatoul_range(start, 1, 8);
+	}
 
-		/* do normal option parsing */
-		opt = bb_getopt_ulflags(argc, argv, "c:n", &start);
-
-		if (opt & OPT_LEVEL) {
-			/* Valid levels are between 1 and 8 */
-			console_log_level = bb_xgetlarg(start, 10, 1, 8);
-		}
-
-		if (!(opt & OPT_FOREGROUND)) {
+	if (!(option_mask32 & OPT_FOREGROUND)) {
 #ifdef BB_NOMMU
-			vfork_daemon_rexec(0, 1, argc, argv, "-n");
+		vfork_daemon_rexec(0, 1, argc, argv, "-n");
 #else
-			bb_xdaemon(0, 1);
+		xdaemon(0, 1);
 #endif
-		}
 	}
 
 	openlog("kernel", 0, LOG_KERN);
@@ -83,32 +68,43 @@ int klogd_main(int argc, char **argv)
 	klogctl(1, NULL, 0);
 
 	/* Set level of kernel console messaging.. */
-	if (console_log_level != -1)
-		klogctl(8, NULL, console_log_level);
+	if (option_mask32 & OPT_LEVEL)
+		klogctl(8, NULL, i);
 
 	syslog(LOG_NOTICE, "klogd started: %s", BB_BANNER);
 
 	while (1) {
+		int n;
+		int priority;
+		char lastc;
+
 		/* Use kernel syscalls */
 		memset(log_buffer, '\0', KLOGD_LOGBUF_SIZE);
-		n = klogctl(2, log_buffer, KLOGD_LOGBUF_SIZE);
+		/* It will be null-terminted */
+		n = klogctl(2, log_buffer, KLOGD_LOGBUF_SIZE - 1);
 		if (n < 0) {
 			if (errno == EINTR)
 				continue;
-			syslog(LOG_ERR, "klogd: Error from sys_sycall: %d - %m.\n",
+			syslog(LOG_ERR, "klogd: error from klogctl(2): %d - %m",
 				   errno);
-			exit(EXIT_FAILURE);
+			break;
 		}
 
 		/* klogctl buffer parsing modelled after code in dmesg.c */
 		start = &log_buffer[0];
 		lastc = '\0';
+		priority = LOG_INFO;
 		for (i = 0; i < n; i++) {
 			if (lastc == '\0' && log_buffer[i] == '<') {
-				priority = 0;
 				i++;
-				while (log_buffer[i] >= '0' && log_buffer[i] <= '9') {
-					priority = priority * 10 + (log_buffer[i] - '0');
+				// kernel never ganerates multi-digit prios
+				//priority = 0;
+				//while (log_buffer[i] >= '0' && log_buffer[i] <= '9') {
+				//	priority = priority * 10 + (log_buffer[i] - '0');
+				//	i++;
+				//}
+				if (isdigit(log_buffer[i])) {
+					priority = (log_buffer[i] - '0');
 					i++;
 				}
 				if (log_buffer[i] == '>')
@@ -127,5 +123,5 @@ int klogd_main(int argc, char **argv)
 	if (ENABLE_FEATURE_CLEAN_UP)
 		RELEASE_CONFIG_BUFFER(log_buffer);
 
-	return EXIT_SUCCESS;
+	return EXIT_FAILURE;
 }
