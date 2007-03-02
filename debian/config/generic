@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Busybox version: 1.4.1
-# Fri Mar  2 00:19:54 2007
+# Fri Mar  2 01:23:25 2007
 #
 CONFIG_HAVE_DOT_CONFIG=y
 
@@ -60,7 +60,7 @@ CONFIG_INSTALL_NO_USR=y
 CONFIG_INSTALL_APPLET_SYMLINKS=y
 # CONFIG_INSTALL_APPLET_HARDLINKS is not set
 # CONFIG_INSTALL_APPLET_DONT is not set
-CONFIG_PREFIX="/static/"
+CONFIG_PREFIX="./_install"
 
 #
 # Busybox Library Tuning
@@ -408,8 +408,8 @@ CONFIG_FDISK_SUPPORT_LARGE_DISKS=y
 # CONFIG_IPCRM is not set
 # CONFIG_IPCS is not set
 CONFIG_LOSETUP=y
-CONFIG_MDEV=y
-CONFIG_FEATURE_MDEV_CONF=y
+# CONFIG_MDEV is not set
+# CONFIG_FEATURE_MDEV_CONF is not set
 # CONFIG_FEATURE_MDEV_EXEC is not set
 # CONFIG_MKSWAP is not set
 # CONFIG_FEATURE_MKSWAP_V0 is not set

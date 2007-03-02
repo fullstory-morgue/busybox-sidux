@@ -19,9 +19,15 @@ configure/busybox-sidux::
 	$(MAKE) oldconfig
 
 build/busybox-sidux::
-	$(MAKE) dep
 	$(MAKE)
 	mv busybox busybox.static
+	@echo
+	for cmd in `./busybox.static | \
+			sed -n '/functions:$$/,$$p' | \
+			sed  -e ' /functions\:/d;s/[[:space:]]*//g; s/,$$//; s/,/\n/g; /busybox/d'`; do \
+				echo $$cmd; \
+	done
+	@echo
 
 clean/busybox-sidux::
 	$(MAKE) distclean
