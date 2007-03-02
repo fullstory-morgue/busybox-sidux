@@ -1,3 +1,9 @@
+busybox-sidux (1.4.1-2) UNRELEASED; urgency=low
+
+  * NOT RELEASED YET
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Fri,  2 Mar 2007 01:26:28 +0100
+
 busybox-sidux (1.4.1-1) unstable; urgency=low
 
   * New upstream release.

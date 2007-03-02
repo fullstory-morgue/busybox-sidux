@@ -24,7 +24,7 @@ build/busybox-sidux::
 	@echo
 	for cmd in `./busybox.static | \
 			sed -n '/functions:$$/,$$p' | \
-			sed  -e ' /functions\:/d;s/[[:space:]]*//g; s/,$$//; s/,/\n/g; /busybox/d'`; do \
+			sed -e '/functions\:/d; s/[[:space:]]*//g; s/,$$//; s/,/\n/g; /busybox/d'`; do \
 				echo $$cmd; \
 	done
 	@echo
