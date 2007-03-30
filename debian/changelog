@@ -1,3 +1,37 @@
+busybox-sidux (1.5.0-1) unstable; urgency=low
+
+  * New upstream release:
+    - find: added support for -user, -not, fixed -mtime, -mmin, -perm
+    - [de]archivers: merge common logic into one module
+    - ping[6]: unified code for both
+    - less: regex search improved
+    - ash: more readable code, testsuite added
+    - sed: several very obscure bugs fixed
+    - chown: -H, -L, -P support (required by POSIX)
+    - tar: handle (broken) checksums a-la Sun; tar restores mode again
+    - grep: implement -w, "implement" -a and -I by ignoring them
+    - cp: more sane behavior when overwriting existing files
+    - init: stop doing silly things with the console (-400 bytes)
+    - httpd: make httpd usable for NOMMU CPUs; fix POSTDATA handling bugs
+    - httpd: run interpreter for configured file extensions in any dir, not
+      only in /cgi-bin/
+    - chrt: new applet
+    - SELinux: SELinux-related code and -Z option added to several applets,
+      new SELinux-specific applets: chcon, runcon.
+    - Build system: produces link map, uses -Wwrite-strings to catch improper
+      usage of string constants.
+    - Data and bss section usage audited and reduced - should help NOMMU
+      targets.
+    - Applets with bug fixes: gunzip, vi, syslogd, dpkg, ls, adjtimex, resize,
+      sv, printf, diff, awk, sort, dpkg, diff, tftp
+    - Applets with usability improvements: swapon, more, ifup/ifdown, hwclock,
+      udhcpd, start_stop_daemon, cmp
+    - Applets with code cleaned up: telnet, fdisk, fsck_minix, mkfs_minix,
+      syslogd, swapon, runsv, svlogd, klogd
+  * adapt glibc compatibility patch.
+
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Fri, 30 Mar 2007 22:27:39 +0200
+
 busybox-sidux (1.4.1-2) UNRELEASED; urgency=low
 
   * NOT RELEASED YET

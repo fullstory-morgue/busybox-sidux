@@ -134,7 +134,6 @@ static void freeHardLinkInfo(HardLinkInfo ** hlInfoHeadPtr)
 		}
 		*hlInfoHeadPtr = NULL;
 	}
-	return;
 }
 
 /* Might be faster (and bigger) if the dev/ino were stored in numeric order;) */
@@ -173,6 +172,9 @@ static void putOctal(char *cp, int len, off_t value)
 
 static void chksum_and_xwrite(int fd, struct TarHeader* hp)
 {
+	/* POSIX says that checksum is done on unsigned bytes
+	 * (Sun and HP-UX gets it wrong... more details in
+	 * GNU tar source) */
 	const unsigned char *cp;
 	int chksum, size;
 
@@ -273,8 +275,8 @@ static int writeTarHeader(struct TarBallInfo *tbInfo,
 					tbInfo->hlInfo->name, 0);
 #endif
 	} else if (S_ISLNK(statbuf->st_mode)) {
-		char *lpath = xreadlink(fileName);
-		if (!lpath)		/* Already printed err msg inside xreadlink() */
+		char *lpath = xmalloc_readlink_or_warn(fileName);
+		if (!lpath)
 			return FALSE;
 		header.typeflag = SYMTYPE;
 		strncpy(header.linkname, lpath, sizeof(header.linkname));
@@ -504,7 +506,7 @@ static int writeTarFile(const int tar_fd, const int verboseFlag,
 		int gzipDataPipe[2] = { -1, -1 };
 		int gzipStatusPipe[2] = { -1, -1 };
 		volatile int vfork_exec_errno = 0;
-		char *zip_exec = (gzip == 1) ? "gzip" : "bzip2";
+		const char *zip_exec = (gzip == 1) ? "gzip" : "bzip2";
 
 		if (pipe(gzipDataPipe) < 0 || pipe(gzipStatusPipe) < 0)
 			bb_perror_msg_and_die("pipe");
@@ -529,7 +531,7 @@ static int writeTarFile(const int tar_fd, const int verboseFlag,
 			close(gzipStatusPipe[0]);
 			fcntl(gzipStatusPipe[1], F_SETFD, FD_CLOEXEC);	/* close on exec shows success */
 
-			execlp(zip_exec, zip_exec, "-f", NULL);
+			BB_EXECLP(zip_exec, zip_exec, "-f", NULL);
 			vfork_exec_errno = errno;
 
 			close(gzipStatusPipe[1]);
@@ -752,6 +754,7 @@ static const struct option tar_long_options[] = {
 };
 #endif
 
+int tar_main(int argc, char **argv);
 int tar_main(int argc, char **argv)
 {
 	char (*get_header_ptr)(archive_handle_t *) = get_header_tar;
@@ -760,7 +763,9 @@ int tar_main(int argc, char **argv)
 	const char *tar_filename = "-";
 	unsigned opt;
 	int verboseFlag = 0;
+#if ENABLE_FEATURE_TAR_LONG_OPTIONS && ENABLE_FEATURE_TAR_FROM
 	llist_t *excludes = NULL;
+#endif
 
 	/* Initialise default values */
 	tar_handle = init_handle();
@@ -773,7 +778,9 @@ int tar_main(int argc, char **argv)
 		"tt:vv:" // count -t,-v
 		"?:" // bail out with usage instead of error return
 		"X::T::" // cumulative lists
+#if ENABLE_FEATURE_TAR_LONG_OPTIONS && ENABLE_FEATURE_TAR_FROM
 		"\xff::" // cumulative lists for --exclude
+#endif
 		USE_FEATURE_TAR_CREATE("c:") "t:x:" // at least one of these is reqd
 		USE_FEATURE_TAR_CREATE("c--tx:t--cx:x--ct") // mutually exclusive
 		SKIP_FEATURE_TAR_CREATE("t--x:x--t"); // mutually exclusive
@@ -788,14 +795,15 @@ int tar_main(int argc, char **argv)
 		USE_FEATURE_TAR_FROM(    "T:X:")
 		USE_FEATURE_TAR_GZIP(    "z"   )
 		USE_FEATURE_TAR_COMPRESS("Z"   )
-		,
-		&base_dir, // -C dir
-		&tar_filename, // -f filename
-		USE_FEATURE_TAR_FROM(&(tar_handle->accept),) // T
-		USE_FEATURE_TAR_FROM(&(tar_handle->reject),) // X
-		USE_FEATURE_TAR_FROM(&excludes            ,) // --exclude
-		&verboseFlag, // combined count for -t and -v
-		&verboseFlag // combined count for -t and -v
+		, &base_dir // -C dir
+		, &tar_filename // -f filename
+		USE_FEATURE_TAR_FROM(, &(tar_handle->accept)) // T
+		USE_FEATURE_TAR_FROM(, &(tar_handle->reject)) // X
+#if ENABLE_FEATURE_TAR_LONG_OPTIONS && ENABLE_FEATURE_TAR_FROM
+		, &excludes // --exclude
+#endif
+		, &verboseFlag // combined count for -t and -v
+		, &verboseFlag // combined count for -t and -v
 		);
 
 	if (verboseFlag) tar_handle->action_header = header_verbose_list;
@@ -828,17 +836,19 @@ int tar_main(int argc, char **argv)
 	if (opt & OPT_COMPRESS)
 		get_header_ptr = get_header_tar_Z;
 
-	if (ENABLE_FEATURE_TAR_FROM) {
-		tar_handle->reject = append_file_list_to_list(tar_handle->reject);
-		/* Append excludes to reject */
-		while (excludes) {
-			llist_t *temp = excludes->link;
-			excludes->link = tar_handle->reject;
-			tar_handle->reject = excludes;
-			excludes = temp;
-		}
-		tar_handle->accept = append_file_list_to_list(tar_handle->accept);
+#if ENABLE_FEATURE_TAR_FROM
+	tar_handle->reject = append_file_list_to_list(tar_handle->reject);
+#if ENABLE_FEATURE_TAR_LONG_OPTIONS
+	/* Append excludes to reject */
+	while (excludes) {
+		llist_t *next = excludes->link;
+		excludes->link = tar_handle->reject;
+		tar_handle->reject = excludes;
+		excludes = next;
 	}
+#endif
+	tar_handle->accept = append_file_list_to_list(tar_handle->accept);
+#endif
 
 	/* Check if we are reading from stdin */
 	if (argv[optind] && *argv[optind] == '-') {
@@ -856,7 +866,7 @@ int tar_main(int argc, char **argv)
 		llist_add_to(&tar_handle->accept, argv[optind]);
 		optind++;
 	}
-	tar_handle->accept = rev_llist(tar_handle->accept);
+	tar_handle->accept = llist_rev(tar_handle->accept);
 
 	if (tar_handle->accept || tar_handle->reject)
 		tar_handle->filter = filter_accept_reject_list;

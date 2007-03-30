@@ -6,12 +6,12 @@
 
 @DPATCH@
 diff -urNad trunk~/Makefile trunk/Makefile
---- trunk~/Makefile	2007-03-01 23:38:31.000000000 +0100
-+++ trunk/Makefile	2007-03-02 00:32:25.000000000 +0100
-@@ -563,8 +563,7 @@
+--- trunk~/Makefile	2007-03-30 22:07:30.000000000 +0200
++++ trunk/Makefile	2007-03-30 22:24:59.000000000 +0200
+@@ -564,8 +564,7 @@
  quiet_cmd_busybox__ ?= LINK    $@
        cmd_busybox__ ?= $(srctree)/scripts/trylink $(CC) $(LDFLAGS) \
-       -o $@ \
+       -o $@ -Wl,-M \
 -      -Wl,--warn-common -Wl,--sort-common -Wl,--gc-sections \
 -      -Wl,--start-group $(busybox-all) -Wl,--end-group
 +      -Wl,--warn-common -Wl,--start-group $(busybox-all) -Wl,--end-group
@@ -19,11 +19,11 @@ diff -urNad trunk~/Makefile trunk/Makefile
  # Generate System.map
  quiet_cmd_sysmap = SYSMAP
 diff -urNad trunk~/applets/applets.c trunk/applets/applets.c
---- trunk~/applets/applets.c	2007-03-01 23:38:43.000000000 +0100
-+++ trunk/applets/applets.c	2007-03-02 00:33:20.000000000 +0100
-@@ -15,16 +15,6 @@
- #include "busybox.h"
- #include <assert.h>
+--- trunk~/applets/applets.c	2007-03-30 22:07:30.000000000 +0200
++++ trunk/applets/applets.c	2007-03-30 22:25:37.000000000 +0200
+@@ -20,16 +20,6 @@
+ #undef PROTOTYPES
+ 
  
 -/* Apparently uclibc defines __GLIBC__ (compat trick?). Oh well. */
 -#if ENABLE_STATIC && defined(__GLIBC__) && !defined(__UCLIBC__)
