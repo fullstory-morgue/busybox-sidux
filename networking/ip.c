@@ -17,6 +17,7 @@
 #include "libiproute/utils.h"
 #include "libiproute/ip_common.h"
 
+int ip_main(int argc, char **argv);
 int ip_main(int argc, char **argv)
 {
 	int ret = EXIT_FAILURE;
@@ -33,8 +34,9 @@ int ip_main(int argc, char **argv)
 		if (ENABLE_FEATURE_IP_LINK && matches(argv[1], "link") == 0) {
 			ret = do_iplink(argc-2, argv+2);
 		}
-		if (ENABLE_FEATURE_IP_TUNNEL &&
-			(matches(argv[1], "tunnel") == 0 || strcmp(argv[1], "tunl") == 0)) {
+		if (ENABLE_FEATURE_IP_TUNNEL
+		 && (matches(argv[1], "tunnel") == 0 || strcmp(argv[1], "tunl") == 0)
+		) {
 			ret = do_iptunnel(argc-2, argv+2);
 		}
 		if (ENABLE_FEATURE_IP_RULE && matches(argv[1], "rule") == 0) {

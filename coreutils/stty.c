@@ -568,10 +568,11 @@ static int find_param(const char * const name)
 		NULL
 	};
 	int i = index_in_str_array(params, name);
-	if (i) {
-		if (!(i == 4 || i == 5))
-			i |= 0x80;
-	}
+	if (i < 0)
+		return 0;
+	if (!(i == 4 || i == 5))
+		i |= 0x80;
+
 	return i;
 }
 
@@ -907,6 +908,7 @@ static void set_control_char_or_die(const struct control_info *info,
 #define STTY_verbose_output     (1<<2)
 #define STTY_recoverable_output (1<<3)
 #define STTY_noargs             (1<<4)
+int stty_main(int argc, char **argv);
 int stty_main(int argc, char **argv)
 {
 	struct termios mode;

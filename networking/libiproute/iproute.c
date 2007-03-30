@@ -469,21 +469,15 @@ static int rtnl_rtcache_request(struct rtnl_handle *rth, int family)
 
 static int iproute_flush_cache(void)
 {
-#define ROUTE_FLUSH_PATH "/proc/sys/net/ipv4/route/flush"
-
-	int len;
-	int flush_fd = open (ROUTE_FLUSH_PATH, O_WRONLY);
-	char *buffer = "-1";
-
+	static const char fn[] = "/proc/sys/net/ipv4/route/flush";
+	int flush_fd = open(fn, O_WRONLY);
 	if (flush_fd < 0) {
-		fprintf(stderr, "Cannot open \"%s\"\n", ROUTE_FLUSH_PATH);
+		bb_perror_msg("cannot open '%s'", fn);
 		return -1;
 	}
 
-	len = strlen (buffer);
-
-	if ((write (flush_fd, (void *)buffer, len)) < len) {
-		fprintf(stderr, "Cannot flush routing cache\n");
+	if (write(flush_fd, "-1", 2) < 2) {
+		bb_perror_msg("cannot flush routing cache");
 		return -1;
 	}
 	close(flush_fd);
@@ -835,9 +829,11 @@ static int iproute_get(int argc, char **argv)
 
 int do_iproute(int argc, char **argv)
 {
-	static const char * const ip_route_commands[] =
-		{ "add", "append", "change", "chg", "delete", "get",
-		"list", "show", "prepend", "replace", "test", "flush", 0 };
+	static const char * const ip_route_commands[] = {
+	/*0-3*/	"add", "append", "change", "chg",
+	/*4-7*/	"delete", "get", "list", "show",
+	/*8..*/	"prepend", "replace", "test", "flush", 0
+	};
 	int command_num = 6;
 	unsigned int flags = 0;
 	int cmd = RTM_NEWROUTE;
@@ -848,7 +844,7 @@ int do_iproute(int argc, char **argv)
 		command_num = index_in_substr_array(ip_route_commands, *argv);
 	}
 	switch (command_num) {
-		case 0: /* add*/
+		case 0: /* add */
 			flags = NLM_F_CREATE|NLM_F_EXCL;
 			break;
 		case 1: /* append */
@@ -859,21 +855,20 @@ int do_iproute(int argc, char **argv)
 			flags = NLM_F_REPLACE;
 			break;
 		case 4: /* delete */
-		case 5: /* del */
 			cmd = RTM_DELROUTE;
 			break;
-		case 6: /* get */
+		case 5: /* get */
 			return iproute_get(argc-1, argv+1);
-		case 7: /* list */
-		case 8: /* show */
+		case 6: /* list */
+		case 7: /* show */
 			return iproute_list_or_flush(argc-1, argv+1, 0);
-		case 9: /* prepend */
+		case 8: /* prepend */
 			flags = NLM_F_CREATE;
-		case 10: /* replace */
+		case 9: /* replace */
 			flags = NLM_F_CREATE|NLM_F_REPLACE;
-		case 11: /* test */
+		case 10: /* test */
 			flags = NLM_F_EXCL;
-		case 12: /* flush */
+		case 11: /* flush */
 			return iproute_list_or_flush(argc-1, argv+1, 1);
 		default:
 			bb_error_msg_and_die("unknown command %s", *argv);
