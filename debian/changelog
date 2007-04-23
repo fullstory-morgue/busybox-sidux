@@ -1,8 +1,9 @@
-busybox-sidux (1.5.0-2) UNRELEASED; urgency=low
+busybox-sidux (1.5.0-2) ORPHANED; urgency=low
 
   * NOT RELEASED YET
+  * ORPHAN PACKAGE
 
- -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Fri, 30 Mar 2007 22:34:17 +0200
+ -- Stefan Lippers-Hollmann <s.l-h@gmx.de>  Mon, 23 Apr 2007 20:22:21 +0200
 
 busybox-sidux (1.5.0-1) unstable; urgency=low
 
